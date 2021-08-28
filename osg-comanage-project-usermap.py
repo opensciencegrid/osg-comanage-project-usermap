@@ -70,7 +70,8 @@ def mkrequest(target, **kw):
 def call_api(target, **kw):
     req = mkrequest(target, **kw)
     resp = urllib.request.urlopen(req)
-    return json.load(resp)
+    payload = resp.read()
+    return json.loads(payload) if payload else None
 
 
 def get_osg_co_groups():
@@ -92,26 +93,30 @@ def get_co_person_identifiers(pid):
     return call_api("identifiers.json", copersonid=pid)
 
 
+def get_datalist(data, listname):
+    return data[listname] if data else []
+
+
 # api call results massagers
 
 def get_osg_co_groups__map():
-    data = get_osg_co_groups()
-    return { g["Id"]: g["Name"] for g in data["CoGroups"] }
+    data = get_datalist(get_osg_co_groups(), "CoGroups")
+    return { g["Id"]: g["Name"] for g in data }
 
 
 def co_group_is_ospool(gid):
-    data = get_co_group_identifiers(gid)
-    return any( i["Type"] == "ospoolproject" for i in data["Identifiers"] )
+    data = get_datalist(get_co_group_identifiers(gid), "Identifiers")
+    return any( i["Type"] == "ospoolproject" for i in data )
 
 
 def get_co_group_members__pids(gid):
-    data = get_co_group_members(gid)
-    return [ m["Person"]["Id"] for m in data["CoGroupMembers"] ]
+    data = get_datalist(get_co_group_members(gid), "CoGroupMembers")
+    return [ m["Person"]["Id"] for m in data ]
 
 
 def get_co_person_osguser(pid):
-    data = get_co_person_identifiers(pid)
-    typemap = { i["Type"]: i["Identifier"] for i in data["Identifiers"] }
+    data = get_datalist(get_co_person_identifiers(pid), "Identifiers")
+    typemap = { i["Type"]: i["Identifier"] for i in data }
     return typemap.get("osguser")
 
 
