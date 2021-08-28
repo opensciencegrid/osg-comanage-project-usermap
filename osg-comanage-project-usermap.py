@@ -129,7 +129,7 @@ def get_co_person_osguser(pid):
     return typemap.get("osguser")
 
 
-def main(args):
+def parse_options(args):
     ops, args = getopt.getopt(args, 'u:d:')
     ops = dict(ops)
 
@@ -142,4 +142,10 @@ def main(args):
     options.user, passwd = getpw(options.user, passfd)
     options.authstr = mkauthstr(options.user, passwd)
 
+
+def main(args):
+    parse_options(args)
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
 
