@@ -11,7 +11,12 @@ ENDPOINT = "https://registry-test.cilogon.org/registry/"
 
 
 _usage = """\
-usage: [PASS=...] {script} [-u USER[:PASS]] [-d passfd] [-e ENDPOINT]
+usage: [PASS=...] {script} [OPTIONS]
+
+OPTIONS:
+  -u USER[:PASS]      specify USER and optionally PASS on command line
+  -d passfd           specify open fd to read PASS
+  -e ENDPOINT         specify REST endpoint
 
 PASS for USER is taken from the first of:
   1. -u USER:PASS
