@@ -26,7 +26,7 @@ def usage(msg=None):
         print(msg + "\n", file=sys.stderr)
 
     script = os.path.basename(__file__)
-    print(_usage.format(script=script, ENDPOINT=ENDPOINT))
+    print(_usage.format(script=script, ENDPOINT=ENDPOINT), file=sys.stderr)
     sys.exit()
 
 
