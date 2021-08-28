@@ -100,21 +100,25 @@ def get_datalist(data, listname):
 # api call results massagers
 
 def get_osg_co_groups__map():
+    #print("get_osg_co_groups__map()")
     data = get_datalist(get_osg_co_groups(), "CoGroups")
     return { g["Id"]: g["Name"] for g in data }
 
 
 def co_group_is_ospool(gid):
+    #print(f"co_group_is_ospool({gid})")
     data = get_datalist(get_co_group_identifiers(gid), "Identifiers")
     return any( i["Type"] == "ospoolproject" for i in data )
 
 
 def get_co_group_members__pids(gid):
+    #print(f"get_co_group_members__pids({gid})")
     data = get_datalist(get_co_group_members(gid), "CoGroupMembers")
     return [ m["Person"]["Id"] for m in data ]
 
 
 def get_co_person_osguser(pid):
+    #print(f"get_co_person_osguser({pid})")
     data = get_datalist(get_co_person_identifiers(pid), "Identifiers")
     typemap = { i["Type"]: i["Identifier"] for i in data }
     return typemap.get("osguser")
