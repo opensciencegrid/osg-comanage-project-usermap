@@ -144,19 +144,24 @@ def parse_options(args):
     options.authstr = mkauthstr(options.user, passwd)
 
 
-def get_osguser_groups():
-    groups = get_osg_co_groups__map()
-    ospool_gids = filter(co_group_is_ospool, groups)
-    gid_pids = { gid: get_co_group_members__pids(gid) for gid in ospool_gids }
-    all_pids = set( pid for gid in gid_pids for pid in gid_pids[gid] )
-    pid_osguser = { pid: get_co_person_osguser(pid) for pid in all_pids }
-
+def gid_pids_to_osguser_pid_gids(gid_pids, pid_osguser):
     pid_gids = collections.defaultdict(set)
 
     for gid in gid_pids:
         for pid in gid_pids[gid]:
             if pid_osguser[pid] is not None:
                 pid_gids[pid].add(gid)
+
+    return pid_gids
+
+
+def get_osguser_groups():
+    groups = get_osg_co_groups__map()
+    ospool_gids = filter(co_group_is_ospool, groups)
+    gid_pids = { gid: get_co_group_members__pids(gid) for gid in ospool_gids }
+    all_pids = set( pid for gid in gid_pids for pid in gid_pids[gid] )
+    pid_osguser = { pid: get_co_person_osguser(pid) for pid in all_pids }
+    pid_gids = gid_pids_to_osguser_pid_gids(gid_pids, pid_osguser)
 
     return { pid_osguser[pid]: sorted(map(groups.get, gids))
              for pid, gids in pid_gids.items() }
