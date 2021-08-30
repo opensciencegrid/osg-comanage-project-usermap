@@ -139,7 +139,7 @@ def get_co_person_osguser(pid):
 
 def parse_options(args):
     try:
-	ops, args = getopt.getopt(args, 'u:d:')
+	ops, args = getopt.getopt(args, 'u:d:f:e:o:h')
     except getopt.GetoptError:
 	usage()
 
