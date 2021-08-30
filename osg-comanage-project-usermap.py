@@ -17,12 +17,14 @@ usage: [PASS=...] {script} [OPTIONS]
 OPTIONS:
   -u USER[:PASS]      specify USER and optionally PASS on command line
   -d passfd           specify open fd to read PASS
+  -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
 
 PASS for USER is taken from the first of:
   1. -u USER:PASS
   2. -d passfd (read from fd)
-  3. read from $PASS env var
+  3. -f passfile (read from file)
+  4. read from $PASS env var
 
 ENDPOINT defaults to {ENDPOINT}
 """
@@ -45,11 +47,13 @@ class Options:
 options = Options()
 
 
-def getpw(user, passfd=None):
+def getpw(user, passfd, passfile):
     if ':' in user:
         user, pw = user.split(':', 1)
     elif passfd is not None:
         pw = os.fdopen(passfd).readline().rstrip('\n')
+    elif passfile is not None:
+        pw = open(passfile).readline().rstrip('\n')
     elif 'PASS' in os.environ:
         pw = os.environ['PASS']
     else:
@@ -140,13 +144,15 @@ def parse_options(args):
         usage("Extra arguments: %s" % repr(args))
 
     passfd = None
+    passfile = None
 
     for op, arg in ops:
         if op == '-u': options.user     = arg
         if op == '-d': passfd           = int(arg)
+        if op == '-f': passfile         = arg
         if op == '-e': options.endpoint = arg
 
-    options.user, passwd = getpw(options.user, passfd)
+    options.user, passwd = getpw(options.user, passfd, passfile)
     options.authstr = mkauthstr(options.user, passwd)
 
 
