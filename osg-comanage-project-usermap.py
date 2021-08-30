@@ -136,6 +136,9 @@ def parse_options(args):
     except getopt.GetoptError:
 	usage()
 
+    if args:
+        usage("Extra arguments: %s" % repr(args))
+
     passfd = None
 
     for op, arg in ops:
