@@ -152,8 +152,8 @@ def parse_options(args):
         if op == '-f': passfile         = arg
         if op == '-e': options.endpoint = arg
 
-    options.user, passwd = getpw(options.user, passfd, passfile)
-    options.authstr = mkauthstr(options.user, passwd)
+    user, passwd = getpw(options.user, passfd, passfile)
+    options.authstr = mkauthstr(user, passwd)
 
 
 def gid_pids_to_osguser_pid_gids(gid_pids, pid_osguser):
