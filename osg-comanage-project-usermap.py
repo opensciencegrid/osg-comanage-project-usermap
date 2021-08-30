@@ -20,6 +20,7 @@ OPTIONS:
   -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
   -o outfile          specify output file (default: write to stdout)
+  -h                  display this help text
 
 PASS for USER is taken from the first of:
   1. -u USER:PASS
@@ -149,6 +150,7 @@ def parse_options(args):
     passfile = None
 
     for op, arg in ops:
+        if op == '-h': usage()
         if op == '-u': options.user     = arg
         if op == '-d': passfd           = int(arg)
         if op == '-f': passfile         = arg
