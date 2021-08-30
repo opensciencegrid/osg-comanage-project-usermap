@@ -71,7 +71,7 @@ def mkauthstr(user, passwd):
 
 
 def mkrequest(target, **kw):
-    url = options.endpoint + target
+    url = os.path.join(options.endpoint, target)
     if kw:
         url += "?" + "&".join( "{}={}".format(k,v) for k,v in kw.items() )
     req = urllib.request.Request(url)
