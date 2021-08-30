@@ -135,13 +135,13 @@ def parse_options(args):
 	ops, args = getopt.getopt(args, 'u:d:')
     except getopt.GetoptError:
 	usage()
-    ops = dict(ops)
 
     passfd = None
 
-    if '-u' in ops: options.user     =     ops['-u']
-    if '-d' in ops: passfd           = int(ops['-d'])
-    if '-e' in ops: options.endpoint =     ops['-e']
+    for op, arg in ops:
+        if op == '-u': options.user     = arg
+        if op == '-d': passfd           = int(arg)
+        if op == '-e': options.endpoint = arg
 
     options.user, passwd = getpw(options.user, passfd)
     options.authstr = mkauthstr(options.user, passwd)
