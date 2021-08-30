@@ -19,6 +19,7 @@ OPTIONS:
   -d passfd           specify open fd to read PASS
   -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
+  -o outfile          specify output file (default: write to stdout)
 
 PASS for USER is taken from the first of:
   1. -u USER:PASS
@@ -41,6 +42,7 @@ def usage(msg=None):
 class Options:
     endpoint = ENDPOINT
     user = "co_8.project_script"
+    outfile = None
     authstr = None
 
 
@@ -151,6 +153,7 @@ def parse_options(args):
         if op == '-d': passfd           = int(arg)
         if op == '-f': passfile         = arg
         if op == '-e': options.endpoint = arg
+        if op == '-o': options.outfile  = arg
 
     user, passwd = getpw(options.user, passfd, passfile)
     options.authstr = mkauthstr(user, passwd)
@@ -179,9 +182,17 @@ def get_osguser_groups():
              for pid, gids in pid_gids.items() }
 
 
-def print_usermap(osguser_groups):
+def print_usermap_to_file(osguser_groups, file):
     for osguser, groups in osguser_groups.items():
-        print("* {} {}".format(osguser, ",".join(groups)))
+        print("* {} {}".format(osguser, ",".join(groups)), file=file)
+
+
+def print_usermap(osguser_groups):
+    if options.outfile:
+        with open(options.outfile, "w") as w:
+            print_usermap_to_file(osguser_groups, w)
+    else:
+        print_usermap_to_file(osguser_groups, sys.stdout)
 
 
 def main(args):
