@@ -163,12 +163,12 @@ def parse_options(args):
 
     for op, arg in ops:
         if op == '-h': usage()
-        if op == '-u': options.user     = arg
+        if op == '-u': options.user      = arg
         if op == '-c': options.osg_co_id = int(arg)
-        if op == '-d': passfd           = int(arg)
-        if op == '-f': passfile         = arg
-        if op == '-e': options.endpoint = arg
-        if op == '-o': options.outfile  = arg
+        if op == '-d': passfd            = int(arg)
+        if op == '-f': passfile          = arg
+        if op == '-e': options.endpoint  = arg
+        if op == '-o': options.outfile   = arg
 
     user, passwd = getpw(options.user, passfd, passfile)
     options.authstr = mkauthstr(user, passwd)
