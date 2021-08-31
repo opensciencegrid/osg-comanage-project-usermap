@@ -8,17 +8,19 @@ import collections
 import urllib.request
 
 
+SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
 
 
-_usage = """\
-usage: [PASS=...] {script} [OPTIONS]
+_usage = f"""\
+usage: [PASS=...] {SCRIPT} [OPTIONS]
 
 OPTIONS:
   -u USER[:PASS]      specify USER and optionally PASS on command line
   -d passfd           specify open fd to read PASS
   -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
+                        (default = {ENDPOINT})
   -o outfile          specify output file (default: write to stdout)
   -h                  display this help text
 
@@ -27,16 +29,13 @@ PASS for USER is taken from the first of:
   2. -d passfd (read from fd)
   3. -f passfile (read from file)
   4. read from $PASS env var
-
-ENDPOINT defaults to {ENDPOINT}
 """
 
 def usage(msg=None):
     if msg:
         print(msg + "\n", file=sys.stderr)
 
-    script = os.path.basename(__file__)
-    print(_usage.format(script=script, ENDPOINT=ENDPOINT), file=sys.stderr)
+    print(_usage, file=sys.stderr)
     sys.exit()
 
 
