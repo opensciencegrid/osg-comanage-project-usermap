@@ -5,20 +5,25 @@ import sys
 import json
 import getopt
 import collections
+import urllib.error
 import urllib.request
 
 
+SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
+OSG_CO_ID = 8
 
 
-_usage = """\
-usage: [PASS=...] {script} [OPTIONS]
+_usage = f"""\
+usage: [PASS=...] {SCRIPT} [OPTIONS]
 
 OPTIONS:
   -u USER[:PASS]      specify USER and optionally PASS on command line
+  -c OSG_CO_ID        specify OSG CO ID (default = {OSG_CO_ID})
   -d passfd           specify open fd to read PASS
   -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
+                        (default = {ENDPOINT})
   -o outfile          specify output file (default: write to stdout)
   -h                  display this help text
 
@@ -27,22 +32,20 @@ PASS for USER is taken from the first of:
   2. -d passfd (read from fd)
   3. -f passfile (read from file)
   4. read from $PASS env var
-
-ENDPOINT defaults to {ENDPOINT}
 """
 
 def usage(msg=None):
     if msg:
         print(msg + "\n", file=sys.stderr)
 
-    script = os.path.basename(__file__)
-    print(_usage.format(script=script, ENDPOINT=ENDPOINT), file=sys.stderr)
+    print(_usage, file=sys.stderr)
     sys.exit()
 
 
 class Options:
     endpoint = ENDPOINT
     user = "co_8.project_script"
+    osg_co_id = OSG_CO_ID
     outfile = None
     authstr = None
 
@@ -88,8 +91,7 @@ def call_api(target, **kw):
 
 
 def get_osg_co_groups():
-    OSG_CO_ID = 8
-    return call_api("co_groups.json", coid=OSG_CO_ID)
+    return call_api("co_groups.json", coid=options.osg_co_id)
 
 
 # primary api calls
@@ -150,7 +152,7 @@ def get_co_person_osguser(pid):
 
 def parse_options(args):
     try:
-        ops, args = getopt.getopt(args, 'u:d:f:e:o:h')
+        ops, args = getopt.getopt(args, 'u:c:d:f:e:o:h')
     except getopt.GetoptError:
         usage()
 
@@ -162,11 +164,12 @@ def parse_options(args):
 
     for op, arg in ops:
         if op == '-h': usage()
-        if op == '-u': options.user     = arg
-        if op == '-d': passfd           = int(arg)
-        if op == '-f': passfile         = arg
-        if op == '-e': options.endpoint = arg
-        if op == '-o': options.outfile  = arg
+        if op == '-u': options.user      = arg
+        if op == '-c': options.osg_co_id = int(arg)
+        if op == '-d': passfd            = int(arg)
+        if op == '-f': passfile          = arg
+        if op == '-e': options.endpoint  = arg
+        if op == '-o': options.outfile   = arg
 
     user, passwd = getpw(options.user, passfd, passfile)
     options.authstr = mkauthstr(user, passwd)
@@ -216,5 +219,9 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+    except urllib.error.HTTPError as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
 
