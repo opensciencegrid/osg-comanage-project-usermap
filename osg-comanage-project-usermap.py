@@ -5,6 +5,7 @@ import sys
 import json
 import getopt
 import collections
+import urllib.error
 import urllib.request
 
 
@@ -218,5 +219,9 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+    except urllib.error.HTTPError as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
 
