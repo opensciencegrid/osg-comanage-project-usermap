@@ -11,8 +11,9 @@ import urllib.request
 
 
 SCRIPT = os.path.basename(__file__)
-ENDPOINT = "https://registry-test.cilogon.org/registry/"
-OSG_CO_ID = 8
+ENDPOINT = "https://registry.cilogon.org/registry/"
+USER = "co_7.group_fixup"
+OSG_CO_ID = 7
 
 GET    = "GET"
 PUT    = "PUT"
@@ -49,8 +50,8 @@ def usage(msg=None):
 
 class Options:
     endpoint = ENDPOINT
-    user = "co_8.project_script"
     osg_co_id = OSG_CO_ID
+    user      = USER
     authstr = None
 
 
