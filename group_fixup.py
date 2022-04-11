@@ -13,6 +13,11 @@ SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
 OSG_CO_ID = 8
 
+GET    = "GET"
+PUT    = "PUT"
+POST   = "POST"
+DELETE = "DELETE"
+
 
 _usage = f"""\
 usage: [PASS=...] {SCRIPT} [OPTIONS]
@@ -74,17 +79,34 @@ def mkauthstr(user, passwd):
 
 
 def mkrequest(target, **kw):
+    return mkrequest2(GET, target, **kw)
+
+
+def mkrequest2(method, target, **kw):
+    return mkrequest3(method, target, data=None, **kw)
+
+
+def mkrequest3(method, target, data, **kw):
     url = os.path.join(options.endpoint, target)
     if kw:
         url += "?" + "&".join( "{}={}".format(k,v) for k,v in kw.items() )
-    req = urllib.request.Request(url)
+    req = urllib.request.Request(url, json.dumps(data).encode("utf-8"))
     req.add_header("Authorization", "Basic %s" % options.authstr)
-    req.get_method = lambda: 'GET'
+    req.add_header("Content-Type", "application/json")
+    req.get_method = lambda: method
     return req
 
 
 def call_api(target, **kw):
-    req = mkrequest(target, **kw)
+    return call_api2(GET, target, **kw)
+
+
+def call_api2(method, target, **kw):
+    return call_api3(method, target, data=None, **kw)
+
+
+def call_api3(method, target, data, **kw):
+    req = mkrequest3(method, target, data, **kw)
     resp = urllib.request.urlopen(req)
     payload = resp.read()
     return json.loads(payload) if payload else None
