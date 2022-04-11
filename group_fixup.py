@@ -31,7 +31,15 @@ OPTIONS:
   -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
                         (default = {ENDPOINT})
+  -a                  show all UnixCluster autogroups, not just misnamed ones
+  -i COGroupId        show fixup info for a specific CO Group
+  -x COGroupId        run UnixCluster Group fixups for given CO Group Id
   -h                  display this help text
+
+Run without options to display misnamed UnixCluster autogroups.
+Run with -a to include UnixCluster autogroups with fixed names, too.
+Run with -i to display only a given CO Group.
+Run with -x to fixup a given CO Group.
 
 PASS for USER is taken from the first of:
   1. -u USER:PASS
@@ -49,10 +57,13 @@ def usage(msg=None):
 
 
 class Options:
-    endpoint = ENDPOINT
+    endpoint  = ENDPOINT
     osg_co_id = OSG_CO_ID
     user      = USER
-    authstr = None
+    authstr   = None
+    fix_gid   = None
+    info_gid  = None
+    showall   = False
 
 
 options = Options()
@@ -281,7 +292,7 @@ def fixup_unixcluster_group(gid):
 
 def parse_options(args):
     try:
-        ops, args = getopt.getopt(args, 'u:c:d:f:e:o:h')
+        ops, args = getopt.getopt(args, 'u:c:d:f:e:x:i:ah')
     except getopt.GetoptError:
         usage()
 
@@ -298,22 +309,33 @@ def parse_options(args):
         if op == '-d': passfd            = int(arg)
         if op == '-f': passfile          = arg
         if op == '-e': options.endpoint  = arg
+        if op == '-x': options.fix_gid   = int(arg)
+        if op == '-i': options.info_gid  = int(arg)
+        if op == '-a': options.showall   = True
 
     user, passwd = getpw(options.user, passfd, passfile)
     options.authstr = mkauthstr(user, passwd)
 
 
-
-
 def main(args):
     parse_options(args)
 
+    if options.fix_gid:
+        return fixup_unixcluster_group(options.fix_gid)
+    elif options.showall:
+        show_all_unixcluster_groups()
+    elif options.info_gid:
+        show_one_unixcluster_group(options.info_gid)
+    else:
+        show_misnamed_unixcluster_groups()
+
+    return 0
 
 
 if __name__ == "__main__":
     try:
-        main(sys.argv[1:])
-    except urllib.error.HTTPError as e:
+        sys.exit(main(sys.argv[1:]))
+    except (RuntimeError, urllib.error.HTTPError) as e:
         print(e, file=sys.stderr)
         sys.exit(1)
 
