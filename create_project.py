@@ -159,89 +159,7 @@ def get_datalist(listname):
     return rorable(get)
 
 
-# api call results massagers
-
-
-def get_unixcluser_autogroups():
-    groups = get_osg_co_groups()
-    return [ g for g in groups["CoGroups"]
-             if "automatically by UnixCluster" in g["Description"] ]
-
-
-def get_misnamed_unixcluster_groups():
-    groups = get_osg_co_groups()
-    return [ g for g in groups["CoGroups"]
-             if "UnixCluster Group" in g["Name"] ]
-
-
-def _osgid_sortkey(i):
-    return int(i["Identifier"])
-
-def get_identifiers_to_delete(identifiers):
-    by_type = collections.defaultdict(list)
-    ids_to_delete = []
-
-    for i in identifiers:
-        by_type[i["Type"]].append(i)
-
-    if len(by_type["osggid"]) == 2:
-        min_identifier = min(by_type["osggid"], key=_osgid_sortkey)
-        ids_to_delete.append(min_identifier["Id"])
-
-    for i in by_type["osggroup"]:
-        if i["Identifier"].endswith("unixclustergroup"):
-            ids_to_delete.append(i["Id"])
-
-    return ids_to_delete
-
-
-def get_fixed_unixcluster_group_name(name):
-    m = re.search(r'^(.*) UnixCluster Group', name)
-    return m.group(1) if m else name
-
-
-# display functions
-
-
-def show_misnamed_unixcluster_group(group):
-    print('CO {CoId} Group {Id}: "{Name}"'.format(**group))
-    oldname = group["Name"]
-    newname = get_fixed_unixcluster_group_name(oldname)
-    if oldname != newname:
-        print('  ** Rename group to: "%s"' % newname)
-    show_group_identifiers(group["Id"])
-    print("")
-
-
-def show_all_unixcluster_groups():
-    groups = get_unixcluser_autogroups()
-    for group in groups:
-        show_misnamed_unixcluster_group(group)
-
-
-def show_one_unixcluster_group(gid):
-    group = get_co_group(gid)
-    show_misnamed_unixcluster_group(group)
-
-
-def show_misnamed_unixcluster_groups():
-    groups = get_misnamed_unixcluster_groups()
-    for group in groups:
-        show_misnamed_unixcluster_group(group)
-
-
-def show_group_identifiers(gid):
-    identifiers = get_co_group_identifiers(gid) | get_datalist("Identifiers")
-    for i in identifiers:
-        print('   - Identifier {Id}: ({Type}) "{Identifier}"'.format(**i))
-
-    ids_to_delete = get_identifiers_to_delete(identifiers)
-    if ids_to_delete:
-        print('  ** Identifier Ids to delete: %s' % ', '.join(ids_to_delete))
-
-
-
-# fixup functions
+# script-specific functions
 
 def add_project_identifier_to_group(gid, project_name):
     identifier_name = "Yes-%s" % project_name
@@ -277,44 +195,6 @@ def gname_to_gid(gname):
 
     group = matching[0]
     return group["Id"]
-
-
-def delete_identifier(id_):
-    return call_api2(DELETE, "identifiers/%d.json" % id_)
-
-
-def rename_co_group(gid, group, newname):
-    # minimal edit CoGroup Request includes Name+CoId+Status+Version
-    new_group_info = {
-        "Name"    : newname,
-        "CoId"    : group["CoId"],
-        "Status"  : group["Status"],
-        "Version" : group["Version"]
-    }
-    data = {
-        "CoGroups"    : [new_group_info],
-        "RequestType" : "CoGroups",
-        "Version"     : "1.0"
-    }
-    return call_api3(PUT, "co_groups/%d.json" % gid, data)
-
-
-def fixup_unixcluster_group(gid):
-    group = get_co_group(gid)
-    oldname = group["Name"]
-    newname = get_fixed_unixcluster_group_name(oldname)
-    identifiers = get_co_group_identifiers(gid) | get_datalist("Identifiers")
-    ids_to_delete = get_identifiers_to_delete(identifiers)
-
-    show_misnamed_unixcluster_group(group)
-    if oldname != newname:
-        rename_co_group(gid, group, newname)
-    for id_ in ids_to_delete:
-        delete_identifier(id_)
-
-    # http errors raise exceptions, so at this point we apparently succeeded
-    print(":thumbsup:")
-    return 0
 
 
 # CLI
