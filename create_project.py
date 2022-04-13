@@ -248,6 +248,41 @@ def show_group_identifiers(gid):
 
 # fixup functions
 
+def add_project_identifier_to_group(gid, project_name):
+    identifier_name = "Yes-%s" % project_name
+    type_ = "ospoolproject"
+    return add_identifier_to_group(gid, type_, identifier_name)
+
+
+def add_identifier_to_group(gid, type_, identifier_name):
+    new_identifier_info = {
+        "Version"    : "1.0",
+        "Type"       : type_,
+        "Identifier" : identifier_name,
+        "Login"      : False,
+        "Person"     : {"Type": "Group", "Id": str(gid)},
+        "Status"     : "Active"
+    }
+    data = {
+      "RequestType" : "Identifiers",
+      "Version"     : "1.0",
+      "Identifiers" : [new_identifier_info]
+    }
+    return call_api3(POST, "identifiers.json", data)
+
+
+def gname_to_gid(gname):
+    groups = get_osg_co_groups() | get_datalist("CoGroups")
+    matching = [ g for g in groups if g["Name"] == gname ]
+
+    if len(matching) > 1:
+        raise RuntimeError("Multiple groups found with Name '%s'" % gname)
+    elif not matching:
+        raise RuntimeError("No group found with Name '%s'" % gname)
+
+    group = matching[0]
+    return group["Id"]
+
 
 def delete_identifier(id_):
     return call_api2(DELETE, "identifiers/%d.json" % id_)
