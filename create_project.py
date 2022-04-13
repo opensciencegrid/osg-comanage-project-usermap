@@ -144,6 +144,13 @@ def get_co_group(gid):
     return grouplist[0]
 
 
+def get_identifier(id_):
+    idfs = call_api("identifiers/%s.json" % id_) | get_datalist("Identifiers")
+    if not idfs:
+        raise RuntimeError("No such Identifier Id: %s" % id_)
+    return idfs[0]
+
+
 # @rorable
 # def foo(x): ...
 # x | foo -> foo(x)
@@ -236,10 +243,26 @@ def main(args):
 
     if options.gname:
         options.gid = gname_to_gid(options.gname)
+    else:
+        options.gname = get_co_group(options.gid)["Name"]
 
-    add_project_identifier_to_group(options.gid, options.project)
+    print('Creating new Identifier for project "%s"\n'
+          'for CO Group "%s" (%s)'
+          % (options.project, options.gname, options.gid))
+    print("")
+
+    resp = add_project_identifier_to_group(options.gid, options.project)
+
+    print("Server Response:")
+    print(json.dumps(resp, indent=2, sort_keys=True))
+
+    new_identifier = get_identifier(resp["Id"])
+    print("")
+    print("New Identifier Object:")
+    print(json.dumps(new_identifier, indent=2, sort_keys=True))
 
     # no exceptions, must have worked
+    print("")
     print(":thumbsup:")
 
 
