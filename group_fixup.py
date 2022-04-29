@@ -34,6 +34,7 @@ OPTIONS:
   -a                  show all UnixCluster autogroups, not just misnamed ones
   -i COGroupId        show fixup info for a specific CO Group
   -x COGroupId        run UnixCluster Group fixups for given CO Group Id
+  --fix-all           run UnixCluster Group fixups for all misnamed groups
   -h                  display this help text
 
 Run without options to display misnamed UnixCluster autogroups.
@@ -64,6 +65,7 @@ class Options:
     fix_gid   = None
     info_gid  = None
     showall   = False
+    fix_all   = False
 
 
 options = Options()
@@ -287,12 +289,18 @@ def fixup_unixcluster_group(gid):
     return 0
 
 
+def fixup_all_unixcluster_groups():
+    groups = get_misnamed_unixcluster_groups()
+    for group in groups:
+        fixup_unixcluster_group(group["Id"])
+
+
 # CLI
 
 
 def parse_options(args):
     try:
-        ops, args = getopt.getopt(args, 'u:c:d:f:e:x:i:ah')
+        ops, args = getopt.getopt(args, 'u:c:d:f:e:x:i:ah', ["fix-all"])
     except getopt.GetoptError:
         usage()
 
@@ -313,6 +321,8 @@ def parse_options(args):
         if op == '-i': options.info_gid  = int(arg)
         if op == '-a': options.showall   = True
 
+        if op == '--fix-all': options.fix_all = True
+
     user, passwd = getpw(options.user, passfd, passfile)
     options.authstr = mkauthstr(user, passwd)
 
@@ -322,6 +332,8 @@ def main(args):
 
     if options.fix_gid:
         return fixup_unixcluster_group(options.fix_gid)
+    elif options.fix_all:
+        return fixup_all_unixcluster_groups()
     elif options.showall:
         show_all_unixcluster_groups()
     elif options.info_gid:
