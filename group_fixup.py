@@ -169,7 +169,7 @@ def get_datalist(listname):
 # api call results massagers
 
 
-def get_unixcluser_autogroups():
+def get_unixcluster_autogroups():
     groups = get_osg_co_groups()
     return [ g for g in groups["CoGroups"]
              if "automatically by UnixCluster" in g["Description"] ]
@@ -221,7 +221,7 @@ def show_misnamed_unixcluster_group(group):
 
 
 def show_all_unixcluster_groups():
-    groups = get_unixcluser_autogroups()
+    groups = get_unixcluster_autogroups()
     for group in groups:
         show_misnamed_unixcluster_group(group)
 
