@@ -34,7 +34,7 @@ jobs:
         #docker_repo=${GITHUB_REPOSITORY/opensciencegrid\/docker-/opensciencegrid/}
         docker_repo=opensciencegrid/comanage-utils
         tag_list=()
-        for registry in hub.opensciencegrid.org docker.io; do
+        for registry in docker.io hub.opensciencegrid.org; do
           for image_tag in "latest" "latest-$TIMESTAMP"; do
             tag_list+=("$registry/$docker_repo":"$image_tag")
           done
