@@ -137,7 +137,7 @@ def get_co_person_identifiers(pid):
 
 
 def get_co_group(gid):
-    grouplist = call_api("co_groups/%d.json" % gid) | get_datalist("CoGroups")
+    grouplist = call_api("co_groups/%s.json" % gid) | get_datalist("CoGroups")
     if not grouplist:
         raise RuntimeError("No such CO Group Id: %s" % gid)
     return grouplist[0]
