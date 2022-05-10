@@ -145,7 +145,7 @@ def get_co_person_identifiers(pid):
 
 
 def get_co_group(gid):
-    grouplist = call_api("co_groups/%d.json" % gid) | get_datalist("CoGroups")
+    grouplist = call_api("co_groups/%s.json" % gid) | get_datalist("CoGroups")
     if not grouplist:
         raise RuntimeError("No such CO Group Id: %s" % gid)
     return grouplist[0]
@@ -252,7 +252,7 @@ def show_group_identifiers(gid):
 
 
 def delete_identifier(id_):
-    return call_api2(DELETE, "identifiers/%d.json" % id_)
+    return call_api2(DELETE, "identifiers/%s.json" % id_)
 
 
 def rename_co_group(gid, group, newname):
@@ -268,7 +268,7 @@ def rename_co_group(gid, group, newname):
         "RequestType" : "CoGroups",
         "Version"     : "1.0"
     }
-    return call_api3(PUT, "co_groups/%d.json" % gid, data)
+    return call_api3(PUT, "co_groups/%s.json" % gid, data)
 
 
 def fixup_unixcluster_group(gid):
