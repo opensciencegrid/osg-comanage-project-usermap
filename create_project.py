@@ -5,7 +5,6 @@ import re
 import sys
 import json
 import getopt
-import collections
 import urllib.error
 import urllib.request
 
