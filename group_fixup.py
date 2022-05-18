@@ -274,6 +274,17 @@ def rename_co_group(gid, group, newname):
     return call_api3(PUT, "co_groups/%s.json" % gid, data)
 
 
+def provision_group(gid):
+    prov_id = options.prov_id
+    path = f"co_provisioning_targets/provision/{prov_id}/cogroupid:{gid}.json"
+    data = {
+        "RequestType" : "CoGroupProvisioning",
+        "Version"     : "1.0",
+        "Synchronous" : True
+    }
+    return call_api3(POST, path, data)
+
+
 def fixup_unixcluster_group(gid):
     group = get_co_group(gid)
     oldname = group["Name"]
@@ -286,6 +297,8 @@ def fixup_unixcluster_group(gid):
         rename_co_group(gid, group, newname)
     for id_ in ids_to_delete:
         delete_identifier(id_)
+
+    provision_group(gid)
 
     # http errors raise exceptions, so at this point we apparently succeeded
     print(":thumbsup:")
