@@ -14,6 +14,7 @@ SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry.cilogon.org/registry/"
 USER = "co_7.group_fixup"
 OSG_CO_ID = 7
+LDAP_PROV_ID = 6
 
 GET    = "GET"
 PUT    = "PUT"
@@ -31,6 +32,7 @@ OPTIONS:
   -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
                         (default = {ENDPOINT})
+  -p LDAP_PROV_ID     LDAP Provisioning Target ID (default = {LDAP_PROV_ID})
   -a                  show all UnixCluster autogroups, not just misnamed ones
   -i COGroupId        show fixup info for a specific CO Group
   -x COGroupId        run UnixCluster Group fixups for given CO Group Id
@@ -60,6 +62,7 @@ def usage(msg=None):
 class Options:
     endpoint  = ENDPOINT
     osg_co_id = OSG_CO_ID
+    prov_id   = LDAP_PROV_ID
     user      = USER
     authstr   = None
     fix_gid   = None
@@ -271,6 +274,17 @@ def rename_co_group(gid, group, newname):
     return call_api3(PUT, "co_groups/%s.json" % gid, data)
 
 
+def provision_group(gid):
+    prov_id = options.prov_id
+    path = f"co_provisioning_targets/provision/{prov_id}/cogroupid:{gid}.json"
+    data = {
+        "RequestType" : "CoGroupProvisioning",
+        "Version"     : "1.0",
+        "Synchronous" : True
+    }
+    return call_api3(POST, path, data)
+
+
 def fixup_unixcluster_group(gid):
     group = get_co_group(gid)
     oldname = group["Name"]
@@ -283,6 +297,8 @@ def fixup_unixcluster_group(gid):
         rename_co_group(gid, group, newname)
     for id_ in ids_to_delete:
         delete_identifier(id_)
+
+    provision_group(gid)
 
     # http errors raise exceptions, so at this point we apparently succeeded
     print(":thumbsup:")
@@ -300,7 +316,7 @@ def fixup_all_unixcluster_groups():
 
 def parse_options(args):
     try:
-        ops, args = getopt.getopt(args, 'u:c:d:f:e:x:i:ah', ["fix-all"])
+        ops, args = getopt.getopt(args, 'u:c:d:f:e:x:i:p:ah', ["fix-all"])
     except getopt.GetoptError:
         usage()
 
@@ -319,6 +335,7 @@ def parse_options(args):
         if op == '-e': options.endpoint  = arg
         if op == '-x': options.fix_gid   = int(arg)
         if op == '-i': options.info_gid  = int(arg)
+        if op == '-p': options.prov_id   = int(arg)
         if op == '-a': options.showall   = True
 
         if op == '--fix-all': options.fix_all = True
