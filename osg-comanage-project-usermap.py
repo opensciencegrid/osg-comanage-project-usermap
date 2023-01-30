@@ -108,44 +108,37 @@ def get_co_person_identifiers(pid):
     return call_api("identifiers.json", copersonid=pid)
 
 
-# @rorable
-# def foo(x): ...
-# x | foo -> foo(x)
-class rorable:
-    def __init__(self, f): self.f = f
-    def __call__(self, *a, **kw): return self.f(*a, **kw)
-    def __ror__ (self, x): return self.f(x)
-
-
-def get_datalist(listname):
-    def get(data):
-        return data[listname] if data else []
-    return rorable(get)
+def get_datalist(data, listname):
+    return data[listname] if data else []
 
 
 # api call results massagers
 
 def get_osg_co_groups__map():
     #print("get_osg_co_groups__map()")
-    data = get_osg_co_groups() | get_datalist("CoGroups")
+    resp_data = get_osg_co_groups()
+    data = get_datalist(resp_data, "CoGroups")
     return { g["Id"]: g["Name"] for g in data }
 
 
 def co_group_is_ospool(gid):
     #print(f"co_group_is_ospool({gid})")
-    data = get_co_group_identifiers(gid) | get_datalist("Identifiers")
+    resp_data = get_co_group_identifiers(gid)
+    data = get_datalist(resp_data, "Identifiers")
     return any( i["Type"] == "ospoolproject" for i in data )
 
 
 def get_co_group_members__pids(gid):
     #print(f"get_co_group_members__pids({gid})")
-    data = get_co_group_members(gid) | get_datalist("CoGroupMembers")
+    resp_data = get_co_group_members(gid)
+    data = get_datalist(resp_data, "CoGroupMembers")
     return [ m["Person"]["Id"] for m in data ]
 
 
 def get_co_person_osguser(pid):
     #print(f"get_co_person_osguser({pid})")
-    data = get_co_person_identifiers(pid) | get_datalist("Identifiers")
+    resp_data = get_co_person_identifiers(pid)
+    data = get_datalist(resp_data, "Identifiers")
     typemap = { i["Type"]: i["Identifier"] for i in data }
     return typemap.get("osguser")
 

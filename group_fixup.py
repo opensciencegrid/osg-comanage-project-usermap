@@ -148,25 +148,15 @@ def get_co_person_identifiers(pid):
 
 
 def get_co_group(gid):
-    grouplist = call_api("co_groups/%s.json" % gid) | get_datalist("CoGroups")
+    resp_data = call_api("co_groups/%s.json" % gid)
+    grouplist = get_datalist(resp_data, "CoGroups")
     if not grouplist:
         raise RuntimeError("No such CO Group Id: %s" % gid)
     return grouplist[0]
 
 
-# @rorable
-# def foo(x): ...
-# x | foo -> foo(x)
-class rorable:
-    def __init__(self, f): self.f = f
-    def __call__(self, *a, **kw): return self.f(*a, **kw)
-    def __ror__ (self, x): return self.f(x)
-
-
-def get_datalist(listname):
-    def get(data):
-        return data[listname] if data else []
-    return rorable(get)
+def get_datalist(data, listname):
+    return data[listname] if data else []
 
 
 # api call results massagers
@@ -241,7 +231,8 @@ def show_misnamed_unixcluster_groups():
 
 
 def show_group_identifiers(gid):
-    identifiers = get_co_group_identifiers(gid) | get_datalist("Identifiers")
+    resp_data = get_co_group_identifiers(gid)
+    identifiers = get_datalist(resp_data, "Identifiers")
     for i in identifiers:
         print('   - Identifier {Id}: ({Type}) "{Identifier}"'.format(**i))
 
@@ -289,7 +280,8 @@ def fixup_unixcluster_group(gid):
     group = get_co_group(gid)
     oldname = group["Name"]
     newname = get_fixed_unixcluster_group_name(oldname)
-    identifiers = get_co_group_identifiers(gid) | get_datalist("Identifiers")
+    resp_data = get_co_group_identifiers(gid)
+    identifiers = get_datalist(resp_data, "Identifiers")
     ids_to_delete = get_identifiers_to_delete(identifiers)
 
     show_misnamed_unixcluster_group(group)

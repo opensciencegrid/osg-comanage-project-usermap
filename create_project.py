@@ -137,32 +137,23 @@ def get_co_person_identifiers(pid):
 
 
 def get_co_group(gid):
-    grouplist = call_api("co_groups/%s.json" % gid) | get_datalist("CoGroups")
+    resp_data = call_api("co_groups/%s.json" % gid)
+    grouplist = get_datalist(resp_data, "CoGroups")
     if not grouplist:
         raise RuntimeError("No such CO Group Id: %s" % gid)
     return grouplist[0]
 
 
 def get_identifier(id_):
-    idfs = call_api("identifiers/%s.json" % id_) | get_datalist("Identifiers")
+    resp_data = call_api("identifiers/%s.json" % id_)
+    idfs = get_datalist(resp_data, "Identifiers")
     if not idfs:
         raise RuntimeError("No such Identifier Id: %s" % id_)
     return idfs[0]
 
 
-# @rorable
-# def foo(x): ...
-# x | foo -> foo(x)
-class rorable:
-    def __init__(self, f): self.f = f
-    def __call__(self, *a, **kw): return self.f(*a, **kw)
-    def __ror__ (self, x): return self.f(x)
-
-
-def get_datalist(listname):
-    def get(data):
-        return data[listname] if data else []
-    return rorable(get)
+def get_datalist(data, listname):
+    return data[listname] if data else []
 
 
 # script-specific functions
@@ -191,7 +182,8 @@ def add_identifier_to_group(gid, type_, identifier_name):
 
 
 def gname_to_gid(gname):
-    groups = get_osg_co_groups() | get_datalist("CoGroups")
+    resp_data = get_osg_co_groups()
+    groups = get_datalist(resp_data, "CoGroups")
     matching = [ g for g in groups if g["Name"] == gname ]
 
     if len(matching) > 1:
