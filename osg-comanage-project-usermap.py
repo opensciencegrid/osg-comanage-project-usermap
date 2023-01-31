@@ -25,6 +25,7 @@ OPTIONS:
   -e ENDPOINT         specify REST endpoint
                         (default = {ENDPOINT})
   -o outfile          specify output file (default: write to stdout)
+  -g filter_group     filter users by group name (eg, 'ap1-login')
   -h                  display this help text
 
 PASS for USER is taken from the first of:
@@ -48,6 +49,7 @@ class Options:
     osg_co_id = OSG_CO_ID
     outfile = None
     authstr = None
+    filtergrp = None
 
 
 options = Options()
@@ -145,7 +147,7 @@ def get_co_person_osguser(pid):
 
 def parse_options(args):
     try:
-        ops, args = getopt.getopt(args, 'u:c:d:f:e:o:h')
+        ops, args = getopt.getopt(args, 'u:c:d:f:g:e:o:h')
     except getopt.GetoptError:
         usage()
 
@@ -163,6 +165,7 @@ def parse_options(args):
         if op == '-f': passfile          = arg
         if op == '-e': options.endpoint  = arg
         if op == '-o': options.outfile   = arg
+        if op == '-g': options.filtergrp = arg
 
     user, passwd = getpw(options.user, passfd, passfile)
     options.authstr = mkauthstr(user, passwd)
@@ -179,13 +182,22 @@ def gid_pids_to_osguser_pid_gids(gid_pids, pid_osguser):
     return pid_gids
 
 
-def get_osguser_groups():
+def filter_by_group(pid_gids, groups, filter_group_name):
+    groups_idx = { v: k for k,v in groups.items() }
+    filter_gid = groups_idx[filter_group_name]  # raises KeyError if missing
+    filter_group_pids = set(get_co_group_members__pids(filter_gid))
+    return { p: g for p,g in pid_gids.items() if p in filter_group_pids }
+
+
+def get_osguser_groups(filter_group_name=None):
     groups = get_osg_co_groups__map()
     ospool_gids = filter(co_group_is_ospool, groups)
     gid_pids = { gid: get_co_group_members__pids(gid) for gid in ospool_gids }
     all_pids = set( pid for gid in gid_pids for pid in gid_pids[gid] )
     pid_osguser = { pid: get_co_person_osguser(pid) for pid in all_pids }
     pid_gids = gid_pids_to_osguser_pid_gids(gid_pids, pid_osguser)
+    if filter_group_name is not None:
+        pid_gids = filter_by_group(pid_gids, groups, filter_group_name)
 
     return { pid_osguser[pid]: sorted(map(groups.get, gids))
              for pid, gids in pid_gids.items() }
@@ -207,7 +219,7 @@ def print_usermap(osguser_groups):
 def main(args):
     parse_options(args)
 
-    osguser_groups = get_osguser_groups()
+    osguser_groups = get_osguser_groups(options.filtergrp)
     print_usermap(osguser_groups)
 
 
