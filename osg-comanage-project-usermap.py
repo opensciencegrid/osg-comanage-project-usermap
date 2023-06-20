@@ -205,7 +205,7 @@ def get_osguser_groups(filter_group_name=None):
 
 def print_usermap_to_file(osguser_groups, file):
     for osguser, groups in sorted(osguser_groups.items()):
-        print("* {} {}".format(osguser, ",".join(groups)), file=file)
+        print("* {} {}".format(osguser, ",".join(group.strip() for group in groups)), file=file)
 
 
 def print_usermap(osguser_groups):
