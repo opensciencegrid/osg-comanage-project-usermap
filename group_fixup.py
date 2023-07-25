@@ -276,6 +276,22 @@ def provision_group(gid):
     return call_api3(POST, path, data)
 
 
+def provision_group_members(gid):
+    prov_id = options.prov_id
+    def path(pid): return f"co_provisioning_targets/provision/{prov_id}/copersonid:{pid}.json"
+    data = {
+        "RequestType" : "CoPersonProvisioning",
+        "Version"     : "1.0",
+        "Synchronous" : True
+    }
+    responses = {}
+    for member in get_co_group_members(gid)["CoGroupMembers"]:
+        if member["Person"]["Type"] == "CO":
+            pid = member["Person"]["Id"]
+            responses[pid] = call_api3(POST, path(pid), data)
+    return responses
+
+
 def fixup_unixcluster_group(gid):
     group = get_co_group(gid)
     oldname = group["Name"]
@@ -291,6 +307,7 @@ def fixup_unixcluster_group(gid):
         delete_identifier(id_)
 
     provision_group(gid)
+    provision_group_members(gid)
 
     # http errors raise exceptions, so at this point we apparently succeeded
     print(":thumbsup:")
