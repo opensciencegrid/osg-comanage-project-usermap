@@ -278,7 +278,6 @@ def provision_group(gid):
 
 def provision_group_members(gid):
     prov_id = options.prov_id
-    def path(pid): return f"co_provisioning_targets/provision/{prov_id}/copersonid:{pid}.json"
     data = {
         "RequestType" : "CoPersonProvisioning",
         "Version"     : "1.0",
@@ -288,7 +287,8 @@ def provision_group_members(gid):
     for member in get_co_group_members(gid)["CoGroupMembers"]:
         if member["Person"]["Type"] == "CO":
             pid = member["Person"]["Id"]
-            responses[pid] = call_api3(POST, path(pid), data)
+            path = f"co_provisioning_targets/provision/{prov_id}/copersonid:{pid}.json"
+            responses[pid] = call_api3(POST, path, data)
     return responses
 
 
