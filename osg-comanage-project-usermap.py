@@ -12,6 +12,9 @@ import urllib.request
 SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
 OSG_CO_ID = 8
+MINTIMEOUT = 5
+MAXTIMEOUT = 300
+TIMEOUTMULTIPLE = 1.5
 
 
 _usage = f"""\
@@ -26,6 +29,8 @@ OPTIONS:
                         (default = {ENDPOINT})
   -o outfile          specify output file (default: write to stdout)
   -g filter_group     filter users by group name (eg, 'ap1-login')
+  -t minTimeout       set minimum timeout, in seconds, for API call (default to {MINTIMEOUT})
+  -T maxTimeout       set maximum timeout, in seconds, for API call (default to {MAXTIMEOUT})
   -h                  display this help text
 
 PASS for USER is taken from the first of:
@@ -50,6 +55,8 @@ class Options:
     outfile = None
     authstr = None
     filtergrp = None
+    minTimeout = MINTIMEOUT
+    maxTimeout = MAXTIMEOUT
 
 
 options = Options()
@@ -87,8 +94,21 @@ def mkrequest(target, **kw):
 
 def call_api(target, **kw):
     req = mkrequest(target, **kw)
-    resp = urllib.request.urlopen(req)
-    payload = resp.read()
+    trying = True
+    currentTimeout = options.minTimeout
+    while trying:
+        try:
+            resp = urllib.request.urlopen(req, timeout=currentTimeout)
+            payload = resp.read()
+            trying = False
+        except urllib.error.URLError as exception:
+            if (currentTimeout < options.maxTimeout):
+                currentTimeout *= TIMEOUTMULTIPLE
+            else:
+                print("Exception raised after maximum timeout " + str(options.maxTimeout) + " seconds reached. Exception reason: " + str(exception.reason) + ".\n Request: " + str(req.full_url))
+                trying = False
+                quit()
+    
     return json.loads(payload) if payload else None
 
 
@@ -147,7 +167,7 @@ def get_co_person_osguser(pid):
 
 def parse_options(args):
     try:
-        ops, args = getopt.getopt(args, 'u:c:d:f:g:e:o:h')
+        ops, args = getopt.getopt(args, 'u:c:d:f:g:e:o:t:T:h')
     except getopt.GetoptError:
         usage()
 
@@ -166,6 +186,8 @@ def parse_options(args):
         if op == '-e': options.endpoint  = arg
         if op == '-o': options.outfile   = arg
         if op == '-g': options.filtergrp = arg
+        if op == '-t': options.minTimeout = float(arg)
+        if op == '-T': options.maxTimeout = float(arg)
 
     user, passwd = getpw(options.user, passfd, passfile)
     options.authstr = mkauthstr(user, passwd)
