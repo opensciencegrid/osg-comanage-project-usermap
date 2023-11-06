@@ -13,8 +13,8 @@ SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
 OSG_CO_ID = 8
 MINTIMEOUT = 5
-MAXTIMEOUT = 300
-TIMEOUTMULTIPLE = 1.5
+MAXTIMEOUT = 625
+TIMEOUTMULTIPLE = 5
 
 
 _usage = f"""\
@@ -55,8 +55,8 @@ class Options:
     outfile = None
     authstr = None
     filtergrp = None
-    minTimeout = MINTIMEOUT
-    maxTimeout = MAXTIMEOUT
+    min_timeout = MINTIMEOUT
+    max_timeout = MAXTIMEOUT
 
 
 options = Options()
@@ -95,19 +95,18 @@ def mkrequest(target, **kw):
 def call_api(target, **kw):
     req = mkrequest(target, **kw)
     trying = True
-    currentTimeout = options.minTimeout
+    currentTimeout = options.min_timeout
     while trying:
         try:
             resp = urllib.request.urlopen(req, timeout=currentTimeout)
             payload = resp.read()
             trying = False
         except urllib.error.URLError as exception:
-            if (currentTimeout < options.maxTimeout):
+            if (currentTimeout < options.max_timeout):
                 currentTimeout *= TIMEOUTMULTIPLE
             else:
-                print("Exception raised after maximum timeout " + str(options.maxTimeout) + " seconds reached. Exception reason: " + str(exception.reason) + ".\n Request: " + str(req.full_url))
-                trying = False
-                quit()
+                sys.exit(f"Exception raised after maximum timeout {options.max_timeout} seconds reached. "
+                         + "Exception reason: {exception.reason}.\n Request: {req.full_url}")
     
     return json.loads(payload) if payload else None
 
@@ -186,8 +185,8 @@ def parse_options(args):
         if op == '-e': options.endpoint   = arg
         if op == '-o': options.outfile    = arg
         if op == '-g': options.filtergrp  = arg
-        if op == '-t': options.minTimeout = float(arg)
-        if op == '-T': options.maxTimeout = float(arg)
+        if op == '-t': options.min_timeout = float(arg)
+        if op == '-T': options.max_timeout = float(arg)
 
     user, passwd = getpw(options.user, passfd, passfile)
     options.authstr = mkauthstr(user, passwd)
