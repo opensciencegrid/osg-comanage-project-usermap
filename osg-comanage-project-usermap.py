@@ -106,7 +106,7 @@ def call_api(target, **kw):
                 currentTimeout *= TIMEOUTMULTIPLE
             else:
                 sys.exit(f"Exception raised after maximum timeout {options.max_timeout} seconds reached. "
-                         + "Exception reason: {exception.reason}.\n Request: {req.full_url}")
+                         + f"Exception reason: {exception.reason}.\n Request: {req.full_url}")
     
     return json.loads(payload) if payload else None
 
