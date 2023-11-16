@@ -226,41 +226,29 @@ def main(args):
     for group in co_groups:
         gid = group["Id"]
         identifier_data = get_co_group_identifiers(gid)
+        
         if identifier_data:
             identifier_list = identifier_data["Identifiers"]
 
-            project_id_index = identifier_index(
-                id_list=identifier_list, id_type="ospoolproject"
-            )
+            project_id_index = identifier_index(id_list=identifier_list, id_type="ospoolproject")
             if project_id_index != -1:
                 project_id = identifier_list[project_id_index]["Identifier"]
-                is_project = (
-                    re.compile(ospool_pattern_str + "*").match(project_id) is not None
-                )
+                is_project = (re.compile(ospool_pattern_str + "*").match(project_id) is not None)
             else:
                 is_project = False
 
             osggid_index = identifier_index(identifier_list, "osggid")
             if osggid_index != -1:
-                highest_osggid = max(
-                    highest_osggid, int(identifier_list[osggid_index]["Identifier"])
-                )
+                highest_osggid = max(highest_osggid, int(identifier_list[osggid_index]["Identifier"]))
             elif is_project is True:
                 # for each, set a 'OSG GID' starting from 200000 and a 'OSG Group Name' that is the group name
-
-                osggid_to_assign = (
-                    200000 if highest_osggid + 1 < 200000 else highest_osggid + 1
-                )
+                osggid_to_assign = (200000 if highest_osggid + 1 < 200000 else highest_osggid + 1)
                 highest_osggid = osggid_to_assign
-                add_identifier_to_group(
-                    gid, type="osggid", identifier_name=osggid_to_assign
-                )
+                add_identifier_to_group(gid, type="osggid", identifier_name=osggid_to_assign)
 
                 project_name = project_id.removeprefix(ospool_pattern_str).lower()
                 add_identifier_to_group(gid, type="osggroup", identifier_name=project_name)
-                print(
-                    f"project {project_id}: added osggid {osggid_to_assign} and osg project name {project_name}"
-                )
+                print(f"project {project_id}: added osggid {osggid_to_assign} and osg project name {project_name}")
 
 
 if __name__ == "__main__":
