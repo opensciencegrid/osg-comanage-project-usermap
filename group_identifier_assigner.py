@@ -20,6 +20,9 @@ PUT = "PUT"
 POST = "POST"
 DELETE = "DELETE"
 
+OSPOOL_PATTERN_STR = "Yes-"
+PROJECT_GIDS_START = 200000
+
 _usage = f"""\
 usage: [PASS=...] {SCRIPT} [OPTIONS]
 
@@ -59,6 +62,7 @@ class Options:
     authstr = None
     min_timeout = MINTIMEOUT
     max_timeout = MAXTIMEOUT
+    project_gid_startval = PROJECT_GIDS_START
 
 
 options = Options()
@@ -220,7 +224,6 @@ def main(args):
     # get groups with 'OSPool project name' matching "Yes-*" that don't have a 'OSG GID'
 
     co_groups = get_osg_co_groups()["CoGroups"]
-    ospool_pattern_str = "Yes-"
     highest_osggid = 0
 
     for group in co_groups:
@@ -230,10 +233,10 @@ def main(args):
         if identifier_data:
             identifier_list = identifier_data["Identifiers"]
 
-            project_id_index = identifier_index(id_list=identifier_list, id_type="ospoolproject")
+            project_id_index = identifier_index(identifier_list, "ospoolproject")
             if project_id_index != -1:
                 project_id = identifier_list[project_id_index]["Identifier"]
-                is_project = (re.compile(ospool_pattern_str + "*").match(project_id) is not None)
+                is_project = (re.compile(OSPOOL_PATTERN_STR + "*").match(project_id) is not None)
             else:
                 is_project = False
 
@@ -242,11 +245,11 @@ def main(args):
                 highest_osggid = max(highest_osggid, int(identifier_list[osggid_index]["Identifier"]))
             elif is_project is True:
                 # for each, set a 'OSG GID' starting from 200000 and a 'OSG Group Name' that is the group name
-                osggid_to_assign = (200000 if highest_osggid + 1 < 200000 else highest_osggid + 1)
+                osggid_to_assign = max(highest_osggid + 1, options.project_gid_startval)
                 highest_osggid = osggid_to_assign
                 add_identifier_to_group(gid, type="osggid", identifier_name=osggid_to_assign)
 
-                project_name = project_id.removeprefix(ospool_pattern_str).lower()
+                project_name = project_id.removeprefix(OSPOOL_PATTERN_STR).lower()
                 add_identifier_to_group(gid, type="osggroup", identifier_name=project_name)
                 print(f"project {project_id}: added osggid {osggid_to_assign} and osg project name {project_name}")
 
