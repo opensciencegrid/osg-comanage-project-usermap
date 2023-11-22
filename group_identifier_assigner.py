@@ -247,7 +247,7 @@ def main(args):
                 highest_osggid = max(highest_osggid, int(identifier_list[osggid_index]["Identifier"]))
             elif is_project is True:
                 project_name = project_id.replace(OSPOOL_PROJECT_PREFIX_STR, "", 1).lower()
-                projects_to_assign_identifiers.append(tuple([gid, project_name]))
+                projects_to_assign_identifiers.append((gid, project_name,))
 
     for gid, project_name in projects_to_assign_identifiers:
         # for each, set a 'OSG GID' starting from 200000 and a 'OSG Group Name' that is the group name
