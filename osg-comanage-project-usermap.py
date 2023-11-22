@@ -233,7 +233,7 @@ def parse_options(args):
 def get_ldap_group_members_data():
     gidNumber_str = "gidNumber: "
     gidNumber_regex = re.compile(gidNumber_str)
-    member_str = f"hasMember: "
+    member_str = "hasMember: "
     member_regex = re.compile(member_str)
 
     auth_str = subprocess.run(
