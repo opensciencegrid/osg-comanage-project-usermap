@@ -11,6 +11,7 @@ import urllib.request
 SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
 OSG_CO_ID = 8
+CLUSTER_ID = 10
 MINTIMEOUT = 5
 MAXTIMEOUT = 625
 TIMEOUTMULTIPLE = 5
@@ -23,12 +24,14 @@ DELETE = "DELETE"
 OSPOOL_PROJECT_PREFIX_STR = "Yes-"
 PROJECT_GIDS_START = 200000
 
+
 _usage = f"""\
 usage: [PASS=...] {SCRIPT} [OPTIONS]
 
 OPTIONS:
   -u USER[:PASS]      specify USER and optionally PASS on command line
   -c OSG_CO_ID        specify OSG CO ID (default = {OSG_CO_ID})
+  -p CLUSTER_ID       specify UNIX Cluster ID (default = {CLUSTER_ID})
   -d passfd           specify open fd to read PASS
   -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
@@ -58,6 +61,7 @@ class Options:
     endpoint = ENDPOINT
     user = "co_8.william_test"
     osg_co_id = OSG_CO_ID
+    unix_id = CLUSTER_ID
     outfile = None
     authstr = None
     min_timeout = MINTIMEOUT
@@ -202,6 +206,8 @@ def parse_options(args):
             options.user = arg
         if op == "-c":
             options.osg_co_id = int(arg)
+        if op == "-p":
+            options.unix_id = int(arg)
         if op == "-d":
             passfd = int(arg)
         if op == "-f":
@@ -226,7 +232,13 @@ def main(args):
 
     co_groups = get_osg_co_groups()["CoGroups"]
     highest_osggid = 0
+    project_groups = set()
     projects_to_assign_identifiers = []
+
+    unix_cluster_groups = call_api("unix_cluster/unix_cluster_groups.json", unix_cluster_id=options.unix_id)
+    clustered_group_ids = set(group["CoGroupId"] for group in unix_cluster_groups["UnixClusterGroups"])
+    projects_needing_cluster_groups = set()
+    projects_needing_provisioning = set()
 
     for group in co_groups:
         gid = group["Id"]
@@ -238,16 +250,24 @@ def main(args):
             project_id_index = identifier_index(identifier_list, "ospoolproject")
             if project_id_index != -1:
                 project_id = str(identifier_list[project_id_index]["Identifier"])
-                is_project = re.compile(OSPOOL_PROJECT_PREFIX_STR + "*").match(project_id) is not None
-            else:
-                is_project = False
+                if re.compile(OSPOOL_PROJECT_PREFIX_STR + "*").match(project_id) is not None:
+                    project_groups.add(gid)
 
             osggid_index = identifier_index(identifier_list, "osggid")
             if osggid_index != -1:
                 highest_osggid = max(highest_osggid, int(identifier_list[osggid_index]["Identifier"]))
-            elif is_project is True:
-                project_name = project_id.replace(OSPOOL_PROJECT_PREFIX_STR, "", 1).lower()
-                projects_to_assign_identifiers.append((gid, project_name,))
+
+            if gid in project_groups:
+                if osggid_index == -1:
+                    project_name = project_id.replace(OSPOOL_PROJECT_PREFIX_STR, "", 1).lower()
+                    project_data = (
+                        gid,
+                        project_name,
+                    )
+                    projects_to_assign_identifiers.append(project_data)
+
+                if not gid in clustered_group_ids:
+                    projects_needing_cluster_groups.add(gid)
 
     for gid, project_name in projects_to_assign_identifiers:
         # for each, set a 'OSG GID' starting from 200000 and a 'OSG Group Name' that is the group name
@@ -257,6 +277,19 @@ def main(args):
         add_identifier_to_group(gid, type="osggroup", identifier_name=project_name)
         print(f"project {project_name}: added osggid {osggid_to_assign} and osg project name {project_name}")
 
+    for gid in projects_needing_cluster_groups:
+        request = {
+            "RequestType": "UnixClusterGroups",
+            "Version": "1.0",
+            "UnixClusterGroups": [{"Version": "1.0", "UnixClusterId": options.unix_id, "CoGroupId": gid}],
+        }
+        call_api3(
+            POST,
+            "unix_cluster/unix_cluster_groups.json",
+            request,
+        )
+        print(f"project group {gid}: added UNIX Cluster Group")
+
 
 if __name__ == "__main__":
     try:
@@ -264,4 +297,3 @@ if __name__ == "__main__":
     except urllib.error.HTTPError as e:
         print(e, file=sys.stderr)
         sys.exit(1)
-
