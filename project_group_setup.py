@@ -12,6 +12,7 @@ SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
 OSG_CO_ID = 8
 CLUSTER_ID = 10
+LDAP_TARGET_ID = 9
 MINTIMEOUT = 5
 MAXTIMEOUT = 625
 TIMEOUTMULTIPLE = 5
@@ -31,7 +32,8 @@ usage: [PASS=...] {SCRIPT} [OPTIONS]
 OPTIONS:
   -u USER[:PASS]      specify USER and optionally PASS on command line
   -c OSG_CO_ID        specify OSG CO ID (default = {OSG_CO_ID})
-  -p CLUSTER_ID       specify UNIX Cluster ID (default = {CLUSTER_ID})
+  -g CLUSTER_ID       specify UNIX Cluster ID (default = {CLUSTER_ID})
+  -l LDAP_TARGET      specify LDAP Provsion ID (defult = {LDAP_TARGET_ID})
   -d passfd           specify open fd to read PASS
   -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
@@ -62,6 +64,7 @@ class Options:
     user = "co_8.william_test"
     osg_co_id = OSG_CO_ID
     unix_id = CLUSTER_ID
+    provision_target = LDAP_TARGET_ID
     outfile = None
     authstr = None
     min_timeout = MINTIMEOUT
@@ -206,8 +209,10 @@ def parse_options(args):
             options.user = arg
         if op == "-c":
             options.osg_co_id = int(arg)
-        if op == "-p":
+        if op == "-g":
             options.unix_id = int(arg)
+        if op == "-l":
+            options.provision_target = int(arg)
         if op == "-d":
             passfd = int(arg)
         if op == "-f":
@@ -238,7 +243,6 @@ def main(args):
     unix_cluster_groups = call_api("unix_cluster/unix_cluster_groups.json", unix_cluster_id=options.unix_id)
     clustered_group_ids = set(group["CoGroupId"] for group in unix_cluster_groups["UnixClusterGroups"])
     projects_needing_cluster_groups = set()
-    projects_needing_provisioning = set()
 
     for group in co_groups:
         gid = group["Id"]
@@ -289,6 +293,10 @@ def main(args):
             request,
         )
         print(f"project group {gid}: added UNIX Cluster Group")
+
+    for project_gid in project_groups:
+        #Provision all project groups
+        call_api2(POST, f"co_provisioning_targets/provision/{options.provision_target}/cogroupid:{project_gid}.json")
 
 
 if __name__ == "__main__":
