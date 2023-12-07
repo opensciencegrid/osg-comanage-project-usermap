@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import json
+#import ldap3
 import getopt
 import urllib.error
 import urllib.request
@@ -11,7 +12,7 @@ import urllib.request
 SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
 OSG_CO_ID = 8
-CLUSTER_ID = 10
+UNIX_CLUSTER_ID = 10
 LDAP_TARGET_ID = 9
 MINTIMEOUT = 5
 MAXTIMEOUT = 625
@@ -32,7 +33,7 @@ usage: [PASS=...] {SCRIPT} [OPTIONS]
 OPTIONS:
   -u USER[:PASS]      specify USER and optionally PASS on command line
   -c OSG_CO_ID        specify OSG CO ID (default = {OSG_CO_ID})
-  -g CLUSTER_ID       specify UNIX Cluster ID (default = {CLUSTER_ID})
+  -g CLUSTER_ID       specify UNIX Cluster ID (default = {UNIX_CLUSTER_ID})
   -l LDAP_TARGET      specify LDAP Provsion ID (defult = {LDAP_TARGET_ID})
   -d passfd           specify open fd to read PASS
   -f passfile         specify path to file to open and read PASS
@@ -63,7 +64,7 @@ class Options:
     endpoint = ENDPOINT
     user = "co_8.william_test"
     osg_co_id = OSG_CO_ID
-    unix_id = CLUSTER_ID
+    ucid = UNIX_CLUSTER_ID
     provision_target = LDAP_TARGET_ID
     outfile = None
     authstr = None
@@ -129,7 +130,7 @@ def call_api3(method, target, data, **kw):
                 currentTimeout *= TIMEOUTMULTIPLE
             else:
                 sys.exit(
-                    f"Exception raised after maximum timeout {options.max_timeout} seconds reached. "
+                    f"Exception raised after maximum retrys and timeout {options.max_timeout} seconds reached. "
                     + f"Exception reason: {exception.reason}.\n Request: {req.full_url}"
                 )
 
@@ -155,29 +156,39 @@ def get_co_person_identifiers(pid):
     return call_api("identifiers.json", copersonid=pid)
 
 
+def get_unix_cluster_groups(ucid):
+    return call_api("unix_cluster/unix_cluster_groups.json", unix_cluster_id=ucid)
+
+
+def get_unix_cluster_groups_ids(ucid):
+    unix_cluster_groups = get_unix_cluster_groups(ucid)
+    return set(group["CoGroupId"] for group in unix_cluster_groups["UnixClusterGroups"])
+
+
 def get_datalist(data, listname):
     return data[listname] if data else []
 
 
-def identifier_index(id_list, id_type):
+def identifier_from_list(id_list, id_type):
     id_type_list = [id["Type"] for id in id_list]
     try:
-        return id_type_list.index(id_type)
+        id_index = id_type_list.index(id_type)
+        return id_list[id_index]["Identifier"]
     except ValueError:
-        return -1
+        return None
 
 
 def identifier_matches(id_list, id_type, regex_string):
     pattern = re.compile(regex_string)
-    index = identifier_index(id_list, id_type)
-    return (index != -1) & (pattern.match(id_list[index]["Identifier"]) is not None)
+    value = identifier_from_list(id_list, id_type)
+    return (value is not None) & (pattern.match(value) is not None)
 
 
-def add_identifier_to_group(gid, type, identifier_name):
+def add_identifier_to_group(gid, type, identifier_value):
     new_identifier_info = {
         "Version": "1.0",
         "Type": type,
-        "Identifier": identifier_name,
+        "Identifier": identifier_value,
         "Login": False,
         "Person": {"Type": "Group", "Id": str(gid)},
         "Status": "Active",
@@ -187,7 +198,20 @@ def add_identifier_to_group(gid, type, identifier_name):
         "Version": "1.0",
         "Identifiers": [new_identifier_info],
     }
-    return call_api3(POST, "identifiers.json", data)
+    call_api3(POST, "identifiers.json", data)
+
+
+def add_unix_cluster_group(gid):
+    request = {
+        "RequestType": "UnixClusterGroups",
+        "Version": "1.0",
+        "UnixClusterGroups": [{"Version": "1.0", "UnixClusterId": options.ucid, "CoGroupId": gid}],
+    }
+    call_api3(POST, "unix_cluster/unix_cluster_groups.json", request)
+
+
+def ldap_provision_group(gid):
+    call_api2(POST, f"co_provisioning_targets/provision/{options.provision_target}/cogroupid:{gid}.json")
 
 
 def parse_options(args):
@@ -210,7 +234,7 @@ def parse_options(args):
         if op == "-c":
             options.osg_co_id = int(arg)
         if op == "-g":
-            options.unix_id = int(arg)
+            options.ucid = int(arg)
         if op == "-l":
             options.provision_target = int(arg)
         if op == "-d":
@@ -230,78 +254,119 @@ def parse_options(args):
     options.authstr = mkauthstr(user, passwd)
 
 
+def append_if_project(project_groups, group):
+    # If this group has a ospoolproject id, and it starts with "Yes-", it's a project
+    if identifier_matches(group["ID_List"], "ospoolproject", (OSPOOL_PROJECT_PREFIX_STR + "*")):
+        # Add a dict of the relavent data for this project to the project_groups list
+        project_groups.append(group)
+
+
+def update_highest_osggid(highest_osggid, group):
+    # Get the value of the osggid identifier, if this group has one
+    osggid = identifier_from_list(group["ID_List"], "osggid")
+    # If this group has a osggid, keep a hold of the highest one we've seen so far
+    if osggid is not None:
+        return max(highest_osggid, int(osggid))
+
+
+def get_comanage_data():
+    comanage_data = {"Projects": [], "highest_osggid": 0}
+
+    co_groups = get_osg_co_groups()["CoGroups"]
+    for group_data in co_groups:
+        try:
+            identifier_list = get_co_group_identifiers(group_data["Id"])["Identifiers"]
+            # Store this groups data in a dictionary to avoid repeated API calls
+            group = {"Gid": group_data["Id"], "Name": group_data["Name"], "ID_List": identifier_list}
+
+            append_if_project(comanage_data["Projects"], group)
+
+            comanage_data["highest_osggid"] = update_highest_osggid(comanage_data["highest_osggid"], group)
+        except TypeError:
+            pass
+    return comanage_data
+
+
+def get_projects_to_setup(project_groups):
+    projects_to_setup = {
+        "Need Identifiers": [],
+        "Need Cluster Groups": [],
+        "Need Provisioning": [],
+    }
+
+    # CO Groups associated with a UNIX Cluster Group
+    clustered_group_ids = get_unix_cluster_groups_ids(options.ucid)
+
+    for project in project_groups:
+        # If this project doesn't have an osggid already assigned to it...
+        if identifier_from_list(project["ID_List"], "osggid") is None:
+            # Prep the project to have the proper identifiers added to it
+            projects_to_setup["Need Identifiers"].append(project)
+
+        # If this project doesn't have a UNIX Cluster Group associated with it...
+        if not project["Gid"] in clustered_group_ids:
+            # Prep it to have one made for it and to be provisioned in LDAP
+            projects_to_setup["Need Cluster Groups"].append(project)
+            projects_to_setup["Need Provisioning"].append(project)
+
+    return projects_to_setup
+
+
+def add_missing_group_identifier(project, id_type, value):
+    # If the group doesn't already have an id of this type...
+    if identifier_from_list(project["ID_List"], id_type) is None:
+        add_identifier_to_group(project["Gid"], id_type, value)
+        print(f'project {project["Gid"]}: aded id {value} of type {id_type}')
+
+
+def assign_identifiers_to_project(project, id_dict):
+    for k, v in id_dict.items():
+        # Add an identifier of type k and value v to this group, if it dones't have them already
+        add_missing_group_identifier(project, k, v)
+
+
+def assign_identifiers(project_list, highest_osggid):
+    highest = highest_osggid
+    for project in project_list:
+        # Project name identifier is the CO Group name in lower case
+        project_name = project["Name"].lower()
+
+        # Determine what osggid to assign this project,
+        # based on the starting range and the highest osggid seen in existing groups
+        osggid_to_assign = max(highest + 1, options.project_gid_startval)
+        highest = osggid_to_assign
+
+        identifiers_to_add = {"osggid": osggid_to_assign, "osggroup": project_name}
+
+        assign_identifiers_to_project(project, identifiers_to_add)
+
+
+def create_unix_cluster_groups(project_list):
+    for project in project_list:
+        add_unix_cluster_group(project["Gid"])
+        print(f'project group {project["Gid"]}: added UNIX Cluster Group')
+
+
+def provision_groups(project_list):
+    for project in project_list:
+        ldap_provision_group(project["Gid"])
+        print(f'project group {project["Gid"]}: Provisioned Group')
+
+
 def main(args):
     parse_options(args)
 
-    # get groups with 'OSPool project name' matching "Yes-*" that don't have a 'OSG GID'
+    comanage_data = get_comanage_data()
+    projects_to_setup = get_projects_to_setup(comanage_data["Projects"])
 
-    co_groups = get_osg_co_groups()["CoGroups"]
-    highest_osggid = 0
-    project_groups = set()
-    projects_to_assign_identifiers = []
-
-    unix_cluster_groups = call_api("unix_cluster/unix_cluster_groups.json", unix_cluster_id=options.unix_id)
-    clustered_group_ids = set(group["CoGroupId"] for group in unix_cluster_groups["UnixClusterGroups"])
-    projects_needing_cluster_groups = set()
-
-    for group in co_groups:
-        gid = group["Id"]
-        identifier_data = get_co_group_identifiers(gid)
-
-        if identifier_data:
-            identifier_list = identifier_data["Identifiers"]
-
-            project_id_index = identifier_index(identifier_list, "ospoolproject")
-            if project_id_index != -1:
-                project_id = str(identifier_list[project_id_index]["Identifier"])
-                if re.compile(OSPOOL_PROJECT_PREFIX_STR + "*").match(project_id) is not None:
-                    project_groups.add(gid)
-
-            osggid_index = identifier_index(identifier_list, "osggid")
-            if osggid_index != -1:
-                highest_osggid = max(highest_osggid, int(identifier_list[osggid_index]["Identifier"]))
-
-            if gid in project_groups:
-                if osggid_index == -1:
-                    project_name = project_id.replace(OSPOOL_PROJECT_PREFIX_STR, "", 1).lower()
-                    project_data = (
-                        gid,
-                        project_name,
-                    )
-                    projects_to_assign_identifiers.append(project_data)
-
-                if not gid in clustered_group_ids:
-                    projects_needing_cluster_groups.add(gid)
-
-    for gid, project_name in projects_to_assign_identifiers:
-        # for each, set a 'OSG GID' starting from 200000 and a 'OSG Group Name' that is the group name
-        osggid_to_assign = max(highest_osggid + 1, options.project_gid_startval)
-        highest_osggid = osggid_to_assign
-        add_identifier_to_group(gid, type="osggid", identifier_name=osggid_to_assign)
-        add_identifier_to_group(gid, type="osggroup", identifier_name=project_name)
-        print(f"project {project_name}: added osggid {osggid_to_assign} and osg project name {project_name}")
-
-    for gid in projects_needing_cluster_groups:
-        request = {
-            "RequestType": "UnixClusterGroups",
-            "Version": "1.0",
-            "UnixClusterGroups": [{"Version": "1.0", "UnixClusterId": options.unix_id, "CoGroupId": gid}],
-        }
-        call_api3(
-            POST,
-            "unix_cluster/unix_cluster_groups.json",
-            request,
-        )
-        print(f"project group {gid}: added UNIX Cluster Group")
-
-    for project_gid in project_groups:
-        #Provision all project groups
-        call_api2(POST, f"co_provisioning_targets/provision/{options.provision_target}/cogroupid:{project_gid}.json")
+    assign_identifiers(projects_to_setup["Need Identifiers"], comanage_data["highest_osggid"])
+    create_unix_cluster_groups(projects_to_setup["Need Cluster Groups"])
+    provision_groups(projects_to_setup["Need Provisioning"])
 
 
 if __name__ == "__main__":
     try:
         main(sys.argv[1:])
-    except urllib.error.HTTPError as e:
+    except OSError as e:
         print(e, file=sys.stderr)
         sys.exit(1)
