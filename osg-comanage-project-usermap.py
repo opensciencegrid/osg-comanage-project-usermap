@@ -153,7 +153,8 @@ def get_co_group_members__pids(gid):
     #print(f"get_co_group_members__pids({gid})")
     resp_data = get_co_group_members(gid)
     data = get_datalist(resp_data, "CoGroupMembers")
-    return [ m["Person"]["Id"] for m in data ]
+    # For INF-1060: Temporary Fix until "The Great Project Provisioning" is finished
+    return [ m["Person"]["Id"] for m in data if m["Member"] == True]
 
 
 def get_co_person_osguser(pid):
