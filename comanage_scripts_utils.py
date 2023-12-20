@@ -8,9 +8,11 @@ import urllib.error
 import urllib.request
 from ldap3 import Server, Connection, ALL, ALL_ATTRIBUTES, SAFE_SYNC
 
+
 MIN_TIMEOUT = 5
 MAX_TIMEOUT = 625
 TIMEOUTMULTIPLE = 5
+
 
 GET    = "GET"
 PUT    = "PUT"
@@ -73,7 +75,7 @@ def call_api3(method, target, data, endpoint, authstr, **kw):
                 currentTimeout *= TIMEOUTMULTIPLE
             else:
                 sys.exit(
-                    f"Exception raised after maximum retrys and/or timeout {MAX_TIMEOUT} seconds reached. "
+                    f"Exception raised after maximum number of retries and/or timeout {MAX_TIMEOUT} seconds reached. "
                     + f"Exception reason: {exception.reason}.\n Request: {req.full_url}"
                 )
 

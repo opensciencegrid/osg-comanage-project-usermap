@@ -194,14 +194,14 @@ def add_missing_group_identifier(project, id_type, value):
     # If the group doesn't already have an id of this type...
     if utils.identifier_from_list(project["ID_List"], id_type) is None:
         utils.add_identifier_to_group(project["Gid"], id_type, value, options.endpoint, options.authstr)
-        print(f'project {project["Gid"]}: aded id {value} of type {id_type}')
+        print(f'project {project["Gid"]}: added id {value} of type {id_type}')
 
 
 def assign_identifiers_to_project(project, id_dict):
     for k, v in id_dict.items():
         # Add an identifier of type k and value v to this group, if it doesn't have them already
         add_missing_group_identifier(project, k, v)
-    # Update the project object to incldue the new identifiers
+    # Update the project object to include the new identifiers
     new_identifiers = utils.get_co_group_identifiers(project["Gid"], options.endpoint, options.authstr)["Identifiers"]
     project["ID_List"] = new_identifiers
 
