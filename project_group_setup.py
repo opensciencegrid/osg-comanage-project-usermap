@@ -190,15 +190,6 @@ def get_projects_needing_provisioning(project_groups):
         return set()
 
 
-def get_projects_to_setup(project_groups):
-    projects_to_setup = {
-        "Need Identifiers": get_projects_needing_identifiers(project_groups),
-        "Need Cluster Groups": get_projects_needing_cluster_groups(project_groups),
-        "Need Provisioning": get_projects_needing_provisioning(project_groups),
-    }
-    return projects_to_setup
-
-
 def add_missing_group_identifier(project, id_type, value):
     # If the group doesn't already have an id of this type...
     if utils.identifier_from_list(project["ID_List"], id_type) is None:
@@ -208,8 +199,11 @@ def add_missing_group_identifier(project, id_type, value):
 
 def assign_identifiers_to_project(project, id_dict):
     for k, v in id_dict.items():
-        # Add an identifier of type k and value v to this group, if it dones't have them already
+        # Add an identifier of type k and value v to this group, if it doesn't have them already
         add_missing_group_identifier(project, k, v)
+    # Update the project object to incldue the new identifiers
+    new_identifiers = utils.get_co_group_identifiers(project["Gid"], options.endpoint, options.authstr)["Identifiers"]
+    project["ID_List"] = new_identifiers
 
 
 def assign_identifiers(project_list, highest_osggid):
@@ -244,11 +238,17 @@ def main(args):
     parse_options(args)
 
     comanage_data = get_comanage_data()
-    projects_to_setup = get_projects_to_setup(comanage_data["Projects"])
+    projects = comanage_data["Projects"]
+    highest_current_osggid = comanage_data["highest_osggid"]
 
-    assign_identifiers(projects_to_setup["Need Identifiers"], comanage_data["highest_osggid"])
-    create_unix_cluster_groups(projects_to_setup["Need Cluster Groups"])
-    provision_groups(projects_to_setup["Need Provisioning"])
+    projects_needing_identifiers = get_projects_needing_identifiers(projects)
+    assign_identifiers(projects_needing_identifiers, highest_current_osggid)
+
+    projects_needing_cluster_groups = get_projects_needing_cluster_groups(projects)
+    create_unix_cluster_groups(projects_needing_cluster_groups)
+
+    projects_needing_provisioning = get_projects_needing_provisioning(projects)
+    provision_groups(projects_needing_provisioning)
 
 
 if __name__ == "__main__":
