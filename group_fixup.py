@@ -3,11 +3,11 @@
 import os
 import re
 import sys
-import json
 import getopt
 import collections
 import urllib.error
 import urllib.request
+import comanage_scripts_utils as utils
 
 
 SCRIPT = os.path.basename(__file__)
@@ -15,11 +15,6 @@ ENDPOINT = "https://registry.cilogon.org/registry/"
 USER = "co_7.group_fixup"
 OSG_CO_ID = 7
 LDAP_PROV_ID = 6
-
-GET    = "GET"
-PUT    = "PUT"
-POST   = "POST"
-DELETE = "DELETE"
 
 
 _usage = f"""\
@@ -74,102 +69,17 @@ class Options:
 options = Options()
 
 
-def getpw(user, passfd, passfile):
-    if ':' in user:
-        user, pw = user.split(':', 1)
-    elif passfd is not None:
-        pw = os.fdopen(passfd).readline().rstrip('\n')
-    elif passfile is not None:
-        pw = open(passfile).readline().rstrip('\n')
-    elif 'PASS' in os.environ:
-        pw = os.environ['PASS']
-    else:
-        usage("PASS required")
-    return user, pw
-
-
-def mkauthstr(user, passwd):
-    from base64 import encodebytes
-    raw_authstr = '%s:%s' % (user, passwd)
-    return encodebytes(raw_authstr.encode()).decode().replace('\n', '')
-
-
-def mkrequest(target, **kw):
-    return mkrequest2(GET, target, **kw)
-
-
-def mkrequest2(method, target, **kw):
-    return mkrequest3(method, target, data=None, **kw)
-
-
-def mkrequest3(method, target, data, **kw):
-    url = os.path.join(options.endpoint, target)
-    if kw:
-        url += "?" + "&".join( "{}={}".format(k,v) for k,v in kw.items() )
-    req = urllib.request.Request(url, json.dumps(data).encode("utf-8"))
-    req.add_header("Authorization", "Basic %s" % options.authstr)
-    req.add_header("Content-Type", "application/json")
-    req.get_method = lambda: method
-    return req
-
-
-def call_api(target, **kw):
-    return call_api2(GET, target, **kw)
-
-
-def call_api2(method, target, **kw):
-    return call_api3(method, target, data=None, **kw)
-
-
-def call_api3(method, target, data, **kw):
-    req = mkrequest3(method, target, data, **kw)
-    resp = urllib.request.urlopen(req)
-    payload = resp.read()
-    return json.loads(payload) if payload else None
-
-
-# primary api calls
-
-
-def get_osg_co_groups():
-    return call_api("co_groups.json", coid=options.osg_co_id)
-
-
-def get_co_group_identifiers(gid):
-    return call_api("identifiers.json", cogroupid=gid)
-
-
-def get_co_group_members(gid):
-    return call_api("co_group_members.json", cogroupid=gid)
-
-
-def get_co_person_identifiers(pid):
-    return call_api("identifiers.json", copersonid=pid)
-
-
-def get_co_group(gid):
-    resp_data = call_api("co_groups/%s.json" % gid)
-    grouplist = get_datalist(resp_data, "CoGroups")
-    if not grouplist:
-        raise RuntimeError("No such CO Group Id: %s" % gid)
-    return grouplist[0]
-
-
-def get_datalist(data, listname):
-    return data[listname] if data else []
-
-
 # api call results massagers
 
 
 def get_unixcluster_autogroups():
-    groups = get_osg_co_groups()
+    groups = utils.get_osg_co_groups(options.osg_co_id, options.endpoint, options.authstr)
     return [ g for g in groups["CoGroups"]
              if "automatically by UnixCluster" in g["Description"] ]
 
 
 def get_misnamed_unixcluster_groups():
-    groups = get_osg_co_groups()
+    groups = utils.get_osg_co_groups(options.osg_co_id, options.endpoint, options.authstr)
     return [ g for g in groups["CoGroups"]
              if "UnixCluster Group" in g["Name"] ]
 
@@ -220,7 +130,7 @@ def show_all_unixcluster_groups():
 
 
 def show_one_unixcluster_group(gid):
-    group = get_co_group(gid)
+    group = utils.get_co_group(gid, options.endpoint, options.authstr)
     show_misnamed_unixcluster_group(group)
 
 
@@ -231,8 +141,8 @@ def show_misnamed_unixcluster_groups():
 
 
 def show_group_identifiers(gid):
-    resp_data = get_co_group_identifiers(gid)
-    identifiers = get_datalist(resp_data, "Identifiers")
+    resp_data = utils.get_co_group_identifiers(gid, options.endpoint, options.authstr)
+    identifiers = utils.get_datalist(resp_data, "Identifiers")
     for i in identifiers:
         print('   - Identifier {Id}: ({Type}) "{Identifier}"'.format(**i))
 
@@ -245,69 +155,22 @@ def show_group_identifiers(gid):
 # fixup functions
 
 
-def delete_identifier(id_):
-    return call_api2(DELETE, "identifiers/%s.json" % id_)
-
-
-def rename_co_group(gid, group, newname):
-    # minimal edit CoGroup Request includes Name+CoId+Status+Version
-    new_group_info = {
-        "Name"    : newname,
-        "CoId"    : group["CoId"],
-        "Status"  : group["Status"],
-        "Version" : group["Version"]
-    }
-    data = {
-        "CoGroups"    : [new_group_info],
-        "RequestType" : "CoGroups",
-        "Version"     : "1.0"
-    }
-    return call_api3(PUT, "co_groups/%s.json" % gid, data)
-
-
-def provision_group(gid):
-    prov_id = options.prov_id
-    path = f"co_provisioning_targets/provision/{prov_id}/cogroupid:{gid}.json"
-    data = {
-        "RequestType" : "CoGroupProvisioning",
-        "Version"     : "1.0",
-        "Synchronous" : True
-    }
-    return call_api3(POST, path, data)
-
-
-def provision_group_members(gid):
-    prov_id = options.prov_id
-    data = {
-        "RequestType" : "CoPersonProvisioning",
-        "Version"     : "1.0",
-        "Synchronous" : True
-    }
-    responses = {}
-    for member in get_co_group_members(gid)["CoGroupMembers"]:
-        if member["Person"]["Type"] == "CO":
-            pid = member["Person"]["Id"]
-            path = f"co_provisioning_targets/provision/{prov_id}/copersonid:{pid}.json"
-            responses[pid] = call_api3(POST, path, data)
-    return responses
-
-
 def fixup_unixcluster_group(gid):
-    group = get_co_group(gid)
+    group = utils.get_co_group(gid, options.endpoint, options.authstr)
     oldname = group["Name"]
     newname = get_fixed_unixcluster_group_name(oldname)
-    resp_data = get_co_group_identifiers(gid)
-    identifiers = get_datalist(resp_data, "Identifiers")
+    resp_data = utils.get_co_group_identifiers(gid, options.endpoint, options.authstr)
+    identifiers = utils.get_datalist(resp_data, "Identifiers")
     ids_to_delete = get_identifiers_to_delete(identifiers)
 
     show_misnamed_unixcluster_group(group)
     if oldname != newname:
-        rename_co_group(gid, group, newname)
+        utils.rename_co_group(gid, group, newname, options.endpoint, options.authstr)
     for id_ in ids_to_delete:
-        delete_identifier(id_)
+        utils.delete_identifier(id_, options.endpoint, options.authstr)
 
-    provision_group(gid)
-    provision_group_members(gid)
+    utils.provision_group(gid, options.prov_id, options.endpoint, options.authstr)
+    utils.provision_group_members(gid, options.prov_id, options.endpoint, options.authstr)
 
     # http errors raise exceptions, so at this point we apparently succeeded
     print(":thumbsup:")
@@ -349,8 +212,11 @@ def parse_options(args):
 
         if op == '--fix-all': options.fix_all = True
 
-    user, passwd = getpw(options.user, passfd, passfile)
-    options.authstr = mkauthstr(user, passwd)
+    try:
+        user, passwd = utils.getpw(options.user, passfd, passfile)
+        options.authstr = utils.mkauthstr(user, passwd)
+    except PermissionError:
+        usage("PASS required")
 
 
 def main(args):
