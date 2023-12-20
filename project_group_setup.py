@@ -123,7 +123,8 @@ def update_highest_osggid(highest_osggid, group):
 
 
 def get_comanage_data():
-    comanage_data = {"Projects": [], "highest_osggid": 0}
+    projects_list = []
+    highest_osggid = 0
 
     co_groups = utils.get_osg_co_groups(options.osg_co_id, options.endpoint, options.authstr)["CoGroups"]
     for group_data in co_groups:
@@ -132,12 +133,14 @@ def get_comanage_data():
             # Store this groups data in a dictionary to avoid repeated API calls
             group = {"Gid": group_data["Id"], "Name": group_data["Name"], "ID_List": identifier_list["Identifiers"]}
 
-            append_if_project(comanage_data["Projects"], group)
+            # Add this group to the project list if it's a project, otherwise skip.
+            append_if_project(projects_list, group)
 
-            comanage_data["highest_osggid"] = update_highest_osggid(comanage_data["highest_osggid"], group)
+            # Update highest_osggid, if this group has an osggid and it's higher than the current highest osggid.
+            highest_osggid = update_highest_osggid(highest_osggid, group)
         except TypeError:
             pass
-    return comanage_data
+    return (projects_list, highest_osggid)
 
 
 def get_projects_needing_identifiers(project_groups):
@@ -191,8 +194,9 @@ def get_projects_needing_provisioning(project_groups):
 
 
 def add_missing_group_identifier(project, id_type, value):
-    # If the group doesn't already have an id of this type...
+    # If the group doesn't already have an id of this type ...
     if utils.identifier_from_list(project["ID_List"], id_type) is None:
+        # ... add the identifier to the group
         utils.add_identifier_to_group(project["Gid"], id_type, value, options.endpoint, options.authstr)
         print(f'project {project["Gid"]}: added id {value} of type {id_type}')
 
@@ -237,16 +241,23 @@ def provision_groups(project_list):
 def main(args):
     parse_options(args)
 
-    comanage_data = get_comanage_data()
-    projects = comanage_data["Projects"]
-    highest_current_osggid = comanage_data["highest_osggid"]
+    # Make all of the nessisary calls to COManage's API for the data we'll need to set up projects.
+    # Projects is a List of dicts with keys Gid, Name, and Identifiers, the project's list of identifiers.
+    # Highest_current_osggid is the highest OSGGID that's currently assigned to any CO Group.
+    projects, highest_current_osggid = get_comanage_data()
 
+    # From all the project groups in COManage, find the ones that need OSGGIDs or OSG GroupNames,
+    # then assign them the identifiers that they're missing.
     projects_needing_identifiers = get_projects_needing_identifiers(projects)
     assign_identifiers(projects_needing_identifiers, highest_current_osggid)
 
+    # From all the project groups in COManage, find the ones that don't have UNIX Cluster Groups,
+    # then create UNIX Cluster Groups for them.
     projects_needing_cluster_groups = get_projects_needing_cluster_groups(projects)
     create_unix_cluster_groups(projects_needing_cluster_groups)
 
+    # From all the project groups in COManage, find the ones that aren't already provisioned in LDAP,
+    # then have COManage provision the project/UNIX Cluster Group in LDAP.
     projects_needing_provisioning = get_projects_needing_provisioning(projects)
     provision_groups(projects_needing_provisioning)
 
