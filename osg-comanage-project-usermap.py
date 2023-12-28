@@ -115,6 +115,12 @@ def get_co_group_osggid(gid):
     return list(filter(lambda x : x["Type"] == "osggid", data))[0]["Identifier"]
 
 
+def get_co_group_osggid(gid):
+    resp_data = get_co_group_identifiers(gid)
+    data = get_datalist(resp_data, "Identifiers")
+    return list(filter(lambda x : x["Type"] == "osggid", data))[0]["Identifier"]
+
+
 def get_co_group_members__pids(gid):
     #print(f"get_co_group_members__pids({gid})")
     resp_data = utils.get_co_group_members(gid,  options.endpoint, options.authstr)
