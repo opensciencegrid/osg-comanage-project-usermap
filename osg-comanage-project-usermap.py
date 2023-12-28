@@ -5,7 +5,6 @@ import os
 import sys
 import getopt
 import subprocess
-import collections
 import urllib.error
 import urllib.request
 import comanage_scripts_utils as utils
@@ -25,7 +24,7 @@ LDAP_GROUP_MEMBERS_COMMAND = [
     "ldaps://ldap.cilogon.org",
     "-D",
     "uid=readonly_user,ou=system,o=OSG,o=CO,dc=cilogon,dc=org",
-    "-w", "{}",
+    "-w", "{auth}",
     "-b",
     "ou=groups,o=OSG,o=CO,dc=cilogon,dc=org",
     "-s",
@@ -39,9 +38,9 @@ LDAP_ACTIVE_USERS_COMMAND = [
     "-H", "ldaps://ldap.cilogon.org",
     "-D", "uid=readonly_user,ou=system,o=OSG,o=CO,dc=cilogon,dc=org",
     "-x",
-    "-w",  "{}",
+    "-w",  "{auth}",
     "-b", "ou=people,o=OSG,o=CO,dc=cilogon,dc=org",
-    "(isMemberOf=CO:members:active)", "voPersonApplicationUID",
+    "{filter}", "voPersonApplicationUID",
     "|", "grep", "voPersonApplicationUID",
     "|", "sort",
 ]
@@ -165,13 +164,13 @@ def get_ldap_group_members_data():
             ).stdout.decode('utf-8').strip()
     
     ldap_group_members_command = LDAP_GROUP_MEMBERS_COMMAND
-    ldap_group_members_command[LDAP_GROUP_MEMBERS_COMMAND.index("{}")] = auth_str
+    ldap_group_members_command[LDAP_GROUP_MEMBERS_COMMAND.index("{auth}")] = auth_str
 
     data_file = subprocess.run(
         ldap_group_members_command, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
 
     search_results = list(filter( 
-        lambda x: not re.compile("#|dn|cn|objectClass").match(x),
+        lambda x: not re.compile("#|dn:|cn:|objectClass:").match(x),
         (line for line in data_file)))
         
     search_results.reverse()
@@ -193,14 +192,17 @@ def get_ldap_group_members_data():
     return group_data_dict
 
 
-def get_ldap_active_users():
+def get_ldap_active_users(filter_group_name):
     auth_str = subprocess.run(
             LDAP_AUTH_COMMAND,
             stdout=subprocess.PIPE
             ).stdout.decode('utf-8').strip()
+
+    filter_str = ("(isMemberOf=CO:members:active)" if filter_group_name is None else f"(&(isMemberOf={filter_group_name})(isMemberOf=CO:members:active))")
     
     ldap_active_users_command = LDAP_ACTIVE_USERS_COMMAND
-    ldap_active_users_command[LDAP_ACTIVE_USERS_COMMAND.index("{}")] = auth_str
+    ldap_active_users_command[LDAP_ACTIVE_USERS_COMMAND.index("{auth}")] = auth_str
+    ldap_active_users_command[LDAP_ACTIVE_USERS_COMMAND.index("{filter}")] = filter_str
 
     active_users = subprocess.run(ldap_active_users_command, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
     users = set(line.replace("voPersonApplicationUID: ", "") if re.compile("dn: voPerson*") else "" for line in active_users)
@@ -231,28 +233,10 @@ def get_co_api_data():
     return project_osggids_to_name
 
 
-def gid_pids_to_osguser_pid_gids(gid_pids, pid_osguser):
-    pid_gids = collections.defaultdict(set)
-
-    for gid in gid_pids:
-        for pid in gid_pids[gid]:
-            if pid_osguser[pid] is not None:
-                pid_gids[pid].add(gid)
-
-    return pid_gids
-
-
-def filter_by_group(pid_gids, groups, filter_group_name):
-    groups_idx = { v: k for k,v in groups.items() }
-    filter_gid = groups_idx[filter_group_name]  # raises KeyError if missing
-    filter_group_pids = set(get_co_group_members__pids(filter_gid))
-    return { p: g for p,g in pid_gids.items() if p in filter_group_pids }
-
-
 def get_osguser_groups(filter_group_name=None):
     project_osggids_to_name = get_co_api_data()
     ldap_groups_members = get_ldap_group_members_data()
-    ldap_users = get_ldap_active_users()
+    ldap_users = get_ldap_active_users(filter_group_name)
 
     active_project_osggids = set(ldap_groups_members.keys()).intersection(set(project_osggids_to_name.keys()))
     project_to_user_map = {
@@ -268,9 +252,6 @@ def get_osguser_groups(filter_group_name=None):
                                 all_active_project_users,
                                 project_osggids_to_name,
                                 )
-    
-    #if filter_group_name is not None:
-        #pid_gids = filter_by_group(pid_gids, groups, filter_group_name)
 
     return usernames_to_project_map
 
