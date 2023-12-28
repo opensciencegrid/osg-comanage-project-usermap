@@ -3,6 +3,8 @@
 import re
 import os
 import sys
+import json
+import time
 import getopt
 import subprocess
 import urllib.error
@@ -13,6 +15,11 @@ import comanage_scripts_utils as utils
 SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
 OSG_CO_ID = 8
+MINTIMEOUT = 5
+MAXTIMEOUT = 625
+TIMEOUTMULTIPLE = 5
+CACHE_FILENAME = "COmanage_Projects_cache.txt"
+CACHE_LIFETIME_HOURS = 0.5
 
 LDAP_AUTH_COMMAND = [
     "awk", "/ldap_default_authtok/ {print $3}", "/etc/sssd/conf.d/0060_domain_CILOGON.ORG.conf",
@@ -198,14 +205,16 @@ def get_ldap_active_users(filter_group_name):
             stdout=subprocess.PIPE
             ).stdout.decode('utf-8').strip()
 
-    filter_str = ("(isMemberOf=CO:members:active)" if filter_group_name is None else f"(&(isMemberOf={filter_group_name})(isMemberOf=CO:members:active))")
+    filter_str = ("(isMemberOf=CO:members:active)" if filter_group_name is None 
+                  else f"(&(isMemberOf={filter_group_name})(isMemberOf=CO:members:active))")
     
     ldap_active_users_command = LDAP_ACTIVE_USERS_COMMAND
     ldap_active_users_command[LDAP_ACTIVE_USERS_COMMAND.index("{auth}")] = auth_str
     ldap_active_users_command[LDAP_ACTIVE_USERS_COMMAND.index("{filter}")] = filter_str
 
     active_users = subprocess.run(ldap_active_users_command, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
-    users = set(line.replace("voPersonApplicationUID: ", "") if re.compile("dn: voPerson*") else "" for line in active_users)
+    users = set(line.replace("voPersonApplicationUID: ", "") if re.compile("dn: voPerson*") 
+                else "" for line in active_users)
     return users
 
 
@@ -222,14 +231,38 @@ def create_user_to_projects_map(project_to_user_map, active_users, osggids_to_na
     return users_to_projects_map
 
 
-def get_co_api_data():
-    #TODO add cacheing for COManage API data
-
+def get_groups_data_from_api():
     groups = get_osg_co_groups__map()
     project_osggids_to_name = dict()
     for id,name in groups.items():
         if co_group_is_project(id):
             project_osggids_to_name[get_co_group_osggid(id)] = name
+    return project_osggids_to_name
+
+
+def get_co_api_data():
+    try:
+        r = open(CACHE_FILENAME, "r")
+        lines = r.readlines()
+        if float(lines[0]) >= (time.time() - (60 * 60 * CACHE_LIFETIME_HOURS)):
+            entries = lines[1:len(lines)]
+            project_osggids_to_name = dict()
+            for entry in entries:
+                osggid_name_pair = entry.split(":")
+                if len(osggid_name_pair) == 2:
+                    project_osggids_to_name[osggid_name_pair[0]] = osggid_name_pair[1]
+        else:
+            raise OSError
+    except OSError:
+        with open(CACHE_FILENAME, "w") as w:
+            project_osggids_to_name = get_groups_data_from_api()
+            print(time.time(), file=w)
+            for osggid, name in project_osggids_to_name.items():
+                print(f"{osggid}:{name}", file=w)
+    finally:
+        if r:
+            r.close()
+
     return project_osggids_to_name
 
 
