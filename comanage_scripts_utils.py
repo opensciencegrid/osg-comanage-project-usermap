@@ -6,7 +6,7 @@ import sys
 import json
 import urllib.error
 import urllib.request
-from ldap3 import Server, Connection, ALL, ALL_ATTRIBUTES, SAFE_SYNC
+from ldap3 import Server, Connection, ALL, SAFE_SYNC
 
 
 MIN_TIMEOUT = 5
@@ -40,6 +40,14 @@ def mkauthstr(user, passwd):
     from base64 import encodebytes
     raw_authstr = "%s:%s" % (user, passwd)
     return encodebytes(raw_authstr.encode()).decode().replace("\n", "")
+
+
+def get_ldap_authtok(ldap_authfile):
+    if ldap_authfile is not None:
+        ldap_authtok = open(ldap_authfile).readline().rstrip("\n")
+    else:
+        raise PermissionError
+    return ldap_authtok
 
 
 def mkrequest(method, target, data, endpoint, authstr, **kw):
@@ -135,10 +143,33 @@ def get_ldap_groups(ldap_server, ldap_user, ldap_authtok):
     ldap_group_osggids = set()
     server = Server(ldap_server, get_info=ALL)
     connection = Connection(server, ldap_user, ldap_authtok, client_strategy=SAFE_SYNC, auto_bind=True)
-    _, _, response, _ = connection.search("ou=groups,o=OSG,o=CO,dc=cilogon,dc=org", "(cn=*)", attributes=ALL_ATTRIBUTES)
+    _, _, response, _ = connection.search("ou=groups,o=OSG,o=CO,dc=cilogon,dc=org", "(cn=*)", attributes=["gidNumber"])
     for group in response:
         ldap_group_osggids.add(group["attributes"]["gidNumber"])
     return ldap_group_osggids
+
+
+def get_ldap_group_members(ldap_gid, ldap_server, ldap_user, ldap_authtok):
+    ldap_group_members = set()
+    server = Server(ldap_server, get_info=ALL)
+    connection = Connection(server, ldap_user, ldap_authtok, client_strategy=SAFE_SYNC, auto_bind=True)
+    _, _, response, _ = connection.search("ou=groups,o=OSG,o=CO,dc=cilogon,dc=org", f"(&(gidNumber={ldap_gid})(cn=*))", attributes=["hasMember"])
+    for group in response:
+        ldap_group_members.update(group["attributes"]["hasMember"])
+    return ldap_group_members
+
+
+def get_ldap_active_users(ldap_server, ldap_user, ldap_authtok, filter_group_name=None):
+    ldap_active_users = set()
+    filter_str = ("(isMemberOf=CO:members:active)" if filter_group_name is None 
+                  else f"(&(isMemberOf={filter_group_name})(isMemberOf=CO:members:active))")
+    server = Server(ldap_server, get_info=ALL)
+    connection = Connection(server, ldap_user, ldap_authtok, client_strategy=SAFE_SYNC, auto_bind=True)
+    _, _, response, _ = connection.search("ou=people,o=OSG,o=CO,dc=cilogon,dc=org", filter_str, attributes=["employeeNumber"])
+    for person in response:
+        # the "employeeNumber" is the person's name in the first.last format
+        ldap_active_users.add(person["attributes"]["employeeNumber"])
+    return ldap_active_users
 
 
 def identifier_from_list(id_list, id_type):

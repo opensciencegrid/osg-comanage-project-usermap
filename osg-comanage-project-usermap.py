@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 
-import re
 import os
 import sys
-import json
 import time
 import getopt
-import subprocess
 import urllib.error
 import urllib.request
 import comanage_scripts_utils as utils
@@ -14,43 +11,12 @@ import comanage_scripts_utils as utils
 
 SCRIPT = os.path.basename(__file__)
 ENDPOINT = "https://registry-test.cilogon.org/registry/"
+LDAP_SERVER = "ldaps://ldap-test.cilogon.org"
+LDAP_USER = "uid=registry_user,ou=system,o=OSG,o=CO,dc=cilogon,dc=org"
 OSG_CO_ID = 8
-MINTIMEOUT = 5
-MAXTIMEOUT = 625
-TIMEOUTMULTIPLE = 5
 CACHE_FILENAME = "COmanage_Projects_cache.txt"
 CACHE_LIFETIME_HOURS = 0.5
 
-LDAP_AUTH_COMMAND = [
-    "awk", "/ldap_default_authtok/ {print $3}", "/etc/sssd/conf.d/0060_domain_CILOGON.ORG.conf",
-]
-
-LDAP_GROUP_MEMBERS_COMMAND = [
-    "ldapsearch",
-    "-H",
-    "ldaps://ldap.cilogon.org",
-    "-D",
-    "uid=readonly_user,ou=system,o=OSG,o=CO,dc=cilogon,dc=org",
-    "-w", "{auth}",
-    "-b",
-    "ou=groups,o=OSG,o=CO,dc=cilogon,dc=org",
-    "-s",
-    "one",
-    "(cn=*)",
-]
-
-LDAP_ACTIVE_USERS_COMMAND = [
-    "ldapsearch",
-    "-LLL",
-    "-H", "ldaps://ldap.cilogon.org",
-    "-D", "uid=readonly_user,ou=system,o=OSG,o=CO,dc=cilogon,dc=org",
-    "-x",
-    "-w",  "{auth}",
-    "-b", "ou=people,o=OSG,o=CO,dc=cilogon,dc=org",
-    "{filter}", "voPersonApplicationUID",
-    "|", "grep", "voPersonApplicationUID",
-    "|", "sort",
-]
 
 _usage = f"""\
 usage: [PASS=...] {SCRIPT} [OPTIONS]
@@ -58,6 +24,9 @@ usage: [PASS=...] {SCRIPT} [OPTIONS]
 OPTIONS:
   -u USER[:PASS]      specify USER and optionally PASS on command line
   -c OSG_CO_ID        specify OSG CO ID (default = {OSG_CO_ID})
+  -s LDAP_SERVER      specify LDAP server to read data from
+  -l LDAP_USER        specify LDAP user for reading data from LDAP server
+  -a ldap_authfile    specify path to file to open and read LDAP authtok
   -d passfd           specify open fd to read PASS
   -f passfile         specify path to file to open and read PASS
   -e ENDPOINT         specify REST endpoint
@@ -87,6 +56,9 @@ class Options:
     osg_co_id = OSG_CO_ID
     outfile = None
     authstr = None
+    ldap_server = LDAP_SERVER
+    ldap_user = LDAP_USER
+    ldap_authtok = None
     filtergrp = None
 
 
@@ -110,14 +82,8 @@ def co_group_is_project(gid):
 
 
 def get_co_group_osggid(gid):
-    resp_data = get_co_group_identifiers(gid)
-    data = get_datalist(resp_data, "Identifiers")
-    return list(filter(lambda x : x["Type"] == "osggid", data))[0]["Identifier"]
-
-
-def get_co_group_osggid(gid):
-    resp_data = get_co_group_identifiers(gid)
-    data = get_datalist(resp_data, "Identifiers")
+    resp_data = utils.get_co_group_identifiers(gid, options.endpoint, options.authstr)
+    data = utils.get_datalist(resp_data, "Identifiers")
     return list(filter(lambda x : x["Type"] == "osggid", data))[0]["Identifier"]
 
 
@@ -138,7 +104,7 @@ def get_co_person_osguser(pid):
 
 def parse_options(args):
     try:
-        ops, args = getopt.getopt(args, 'u:c:d:f:g:e:o:h')
+        ops, args = getopt.getopt(args, 'u:c:s:l:a:d:f:g:e:o:h')
     except getopt.GetoptError:
         usage()
 
@@ -147,11 +113,15 @@ def parse_options(args):
 
     passfd = None
     passfile = None
+    ldap_authfile = None
 
     for op, arg in ops:
         if op == '-h': usage()
         if op == '-u': options.user       = arg
         if op == '-c': options.osg_co_id  = int(arg)
+        if op == '-s': options.ldap_server= arg
+        if op == '-l': options.ldap_user  = arg
+        if op == '-a': ldap_authfile      = arg
         if op == '-d': passfd             = int(arg)
         if op == '-f': passfile           = arg
         if op == '-e': options.endpoint   = arg
@@ -161,67 +131,18 @@ def parse_options(args):
     try:
         user, passwd = utils.getpw(options.user, passfd, passfile)
         options.authstr = utils.mkauthstr(user, passwd)
+        options.ldap_authtok = utils.get_ldap_authtok(ldap_authfile)
     except PermissionError:
         usage("PASS required")
 
 
-def get_ldap_group_members_data():
-    gidNumber_str = "gidNumber: "
-    gidNumber_regex = re.compile(gidNumber_str)
-    member_str = "hasMember: "
-    member_regex = re.compile(member_str)
-
-    auth_str = subprocess.run(
-            LDAP_AUTH_COMMAND,
-            stdout=subprocess.PIPE
-            ).stdout.decode('utf-8').strip()
-    
-    ldap_group_members_command = LDAP_GROUP_MEMBERS_COMMAND
-    ldap_group_members_command[LDAP_GROUP_MEMBERS_COMMAND.index("{auth}")] = auth_str
-
-    data_file = subprocess.run(
-        ldap_group_members_command, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
-
-    search_results = list(filter( 
-        lambda x: not re.compile("#|dn:|cn:|objectClass:").match(x),
-        (line for line in data_file)))
-        
-    search_results.reverse()
-
+def get_ldap_group_members_dict():
     group_data_dict = dict()
-    index = 0
-    while index < len(search_results) - 1:
-        while not gidNumber_regex.match(search_results[index]):
-            index += 1
-        gid = search_results[index].replace(gidNumber_str, "")
-        members_list = []
-        while search_results[index] != "":
-            if member_regex.match(search_results[index]):
-                members_list.append(search_results[index].replace(member_str, ""))
-            index += 1
-        group_data_dict[gid] = members_list
-        index += 1
+    for group_gid in utils.get_ldap_groups(options.ldap_server, options.ldap_user, options.ldap_authtok):
+        group_members = utils.get_ldap_group_members(group_gid, options.ldap_server, options.ldap_user, options.ldap_authtok)
+        group_data_dict[group_gid] = group_members
 
     return group_data_dict
-
-
-def get_ldap_active_users(filter_group_name):
-    auth_str = subprocess.run(
-            LDAP_AUTH_COMMAND,
-            stdout=subprocess.PIPE
-            ).stdout.decode('utf-8').strip()
-
-    filter_str = ("(isMemberOf=CO:members:active)" if filter_group_name is None 
-                  else f"(&(isMemberOf={filter_group_name})(isMemberOf=CO:members:active))")
-    
-    ldap_active_users_command = LDAP_ACTIVE_USERS_COMMAND
-    ldap_active_users_command[LDAP_ACTIVE_USERS_COMMAND.index("{auth}")] = auth_str
-    ldap_active_users_command[LDAP_ACTIVE_USERS_COMMAND.index("{filter}")] = filter_str
-
-    active_users = subprocess.run(ldap_active_users_command, stdout=subprocess.PIPE).stdout.decode('utf-8').split('\n')
-    users = set(line.replace("voPersonApplicationUID: ", "") if re.compile("dn: voPerson*") 
-                else "" for line in active_users)
-    return users
 
 
 def create_user_to_projects_map(project_to_user_map, active_users, osggids_to_names):
@@ -256,8 +177,10 @@ def get_co_api_data():
             for entry in entries:
                 osggid_name_pair = entry.split(":")
                 if len(osggid_name_pair) == 2:
-                    project_osggids_to_name[osggid_name_pair[0]] = osggid_name_pair[1]
+                    project_osggids_to_name[int(osggid_name_pair[0])] = osggid_name_pair[1].strip()
+            r.close()
         else:
+            r.close()
             raise OSError
     except OSError:
         with open(CACHE_FILENAME, "w") as w:
@@ -265,17 +188,14 @@ def get_co_api_data():
             print(time.time(), file=w)
             for osggid, name in project_osggids_to_name.items():
                 print(f"{osggid}:{name}", file=w)
-    finally:
-        if r:
-            r.close()
 
     return project_osggids_to_name
 
 
 def get_osguser_groups(filter_group_name=None):
     project_osggids_to_name = get_co_api_data()
-    ldap_groups_members = get_ldap_group_members_data()
-    ldap_users = get_ldap_active_users(filter_group_name)
+    ldap_groups_members = get_ldap_group_members_dict()
+    ldap_users = utils.get_ldap_active_users(options.ldap_server, options.ldap_user, options.ldap_authtok, filter_group_name)
 
     active_project_osggids = set(ldap_groups_members.keys()).intersection(set(project_osggids_to_name.keys()))
     project_to_user_map = {
