@@ -8,6 +8,24 @@ import urllib.error
 import urllib.request
 from ldap3 import Server, Connection, ALL, ALL_ATTRIBUTES, SAFE_SYNC
 
+#PRODUCTION VALUES
+
+PRODUCTION_ENDPOINT = "https://registry.cilogon.org/registry/"
+PRODUCTION_LDAP_SERVER = "ldaps://ldap.cilogon.org"
+PRODUCTION_LDAP_USER = "uid=readonly_user,ou=system,o=OSG,o=CO,dc=cilogon,dc=org"
+PRODUCTION_OSG_CO_ID = 7
+PRODUCTION_UNIX_CLUSTER_ID = 1
+PRODUCTION_LDAP_TARGET_ID = 6
+
+#TEST VALUES
+
+TEST_ENDPOINT = "https://registry-test.cilogon.org/registry/"
+TEST_LDAP_SERVER = "ldaps://ldap-test.cilogon.org"
+TEST_LDAP_USER ="uid=registry_user,ou=system,o=OSG,o=CO,dc=cilogon,dc=org"
+TEST_OSG_CO_ID = 8
+TEST_UNIX_CLUSTER_ID = 10
+TEST_LDAP_TARGET_ID = 9
+
 
 MIN_TIMEOUT = 5
 MAX_TIMEOUT = 625
@@ -153,7 +171,7 @@ def identifier_from_list(id_list, id_type):
 def identifier_matches(id_list, id_type, regex_string):
     pattern = re.compile(regex_string)
     value = identifier_from_list(id_list, id_type)
-    return (value is not None) & (pattern.match(value) is not None)
+    return (value is not None) and (pattern.match(value) is not None)
 
 
 def rename_co_group(gid, group, newname, endpoint, authstr):

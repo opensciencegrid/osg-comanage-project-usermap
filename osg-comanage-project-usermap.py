@@ -6,12 +6,12 @@ import getopt
 import collections
 import urllib.error
 import urllib.request
-import comanage_scripts_utils as utils
+import comanage_utils as utils
 
 
 SCRIPT = os.path.basename(__file__)
-ENDPOINT = "https://registry-test.cilogon.org/registry/"
-OSG_CO_ID = 8
+ENDPOINT = "https://registry.cilogon.org/registry/"
+OSG_CO_ID = 7
 
 
 _usage = f"""\
@@ -45,7 +45,7 @@ def usage(msg=None):
 
 class Options:
     endpoint = ENDPOINT
-    user = "co_8.project_script"
+    user = "co_7.project_script"
     osg_co_id = OSG_CO_ID
     outfile = None
     authstr = None
@@ -170,6 +170,5 @@ def main(args):
 if __name__ == "__main__":
     try:
         main(sys.argv[1:])
-    except urllib.error.HTTPError as e:
-        print(e, file=sys.stderr)
-        sys.exit(1)
+    except Exception as e:
+        sys.exit(e)
