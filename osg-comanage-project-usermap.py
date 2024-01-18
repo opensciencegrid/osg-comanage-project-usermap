@@ -4,8 +4,6 @@ import os
 import sys
 import getopt
 import collections
-import urllib.error
-import urllib.request
 import comanage_utils as utils
 
 
