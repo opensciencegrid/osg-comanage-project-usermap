@@ -4,3 +4,7 @@ LABEL maintainer OSG Software <help@opensciencegrid.org>
 
 COPY *.py /usr/local/bin/
 
+WORKDIR /
+
+COPY requiremments.txt /
+RUN pip3 install --no-cache-dir -r requirements.txt
