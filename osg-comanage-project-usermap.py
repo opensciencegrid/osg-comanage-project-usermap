@@ -149,7 +149,7 @@ def get_osguser_groups(filter_group_name=None):
              for pid, gids in pid_gids.items() }
 
 
-def parse_inputfile(inputfile: str):
+def parse_inputfile(inputfile):
     user_groupmap = dict()
     with open(inputfile) as file:
         for line in file:
@@ -159,7 +159,7 @@ def parse_inputfile(inputfile: str):
     return user_groupmap
 
 
-def merge_maps(maps: list[dict[str, list]]):
+def merge_maps(maps):
     while len(maps) > 1:
         merge_target = maps[0]
         merge_material = maps.pop(1)
