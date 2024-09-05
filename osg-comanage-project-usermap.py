@@ -24,6 +24,7 @@ OPTIONS:
                         (default = {ENDPOINT})
   -o outfile          specify output file (default: write to stdout)
   -g filter_group     filter users by group name (eg, 'ap1-login')
+  -i inputfiles       specify a comma-delineated list of local mapfiles to merge into outfile
   -h                  display this help text
 
 PASS for USER is taken from the first of:
@@ -48,6 +49,7 @@ class Options:
     outfile = None
     authstr = None
     filtergrp = None
+    inputfiles = []
 
 
 options = Options()
@@ -87,7 +89,7 @@ def get_co_person_osguser(pid):
 
 def parse_options(args):
     try:
-        ops, args = getopt.getopt(args, 'u:c:d:f:g:e:o:h')
+        ops, args = getopt.getopt(args, 'u:c:d:f:g:e:o:i:h')
     except getopt.GetoptError:
         usage()
 
@@ -106,6 +108,7 @@ def parse_options(args):
         if op == '-e': options.endpoint   = arg
         if op == '-o': options.outfile    = arg
         if op == '-g': options.filtergrp  = arg
+        if op == '-i': options.inputfiles = arg.split(",")
 
     try:
         user, passwd = utils.getpw(options.user, passfd, passfile)
@@ -146,6 +149,35 @@ def get_osguser_groups(filter_group_name=None):
              for pid, gids in pid_gids.items() }
 
 
+def parse_inputfile(inputfile: str):
+    user_groupmap = dict()
+    with open(inputfile) as file:
+        for line in file:
+            split_line = line.split()
+            if split_line[0] == "*" and len(split_line) >= 3:
+                user_groupmap[split_line[1]] = split_line[2].split(",")
+    return user_groupmap
+
+
+def merge_maps(maps: list[dict[str, list]]):
+    while len(maps) > 1:
+        merge_target = maps[0]
+        merge_material = maps.pop(1)
+        for key in merge_material.keys():
+            if key in merge_target:
+                merge_target[key].extend(merge_material[key])
+                merge_target[key] = list(set(merge_target[key]))
+            else:
+                merge_target[key] = merge_material[key]
+    return maps[0]
+
+
+def merge_inputfiles(osguser_groups):
+    maps = [osguser_groups]
+    for inputfile in options.inputfiles:
+        maps.append(parse_inputfile(inputfile))
+    return merge_maps(maps)
+
 def print_usermap_to_file(osguser_groups, file):
     for osguser, groups in sorted(osguser_groups.items()):
         print("* {} {}".format(osguser, ",".join(group.strip() for group in groups)), file=file)
@@ -163,7 +195,8 @@ def main(args):
     parse_options(args)
 
     osguser_groups = get_osguser_groups(options.filtergrp)
-    print_usermap(osguser_groups)
+    osguser_groups_merged = merge_inputfiles(osguser_groups)
+    print_usermap(osguser_groups_merged)
 
 
 if __name__ == "__main__":
