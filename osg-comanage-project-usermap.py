@@ -117,14 +117,19 @@ def parse_options(args):
     except PermissionError:
         usage("PASS required")
 
+def _deduplicate_list(items):
+    """ Deduplicate a list while maintaining order by converting it to a dictionary and then back to a list. 
+    Used to ensure a consistent ordering for output group lists, since sets are unordered.
+    """
+    return list(dict.fromkeys(items))
 
 def gid_pids_to_osguser_pid_gids(gid_pids, pid_osguser):
-    pid_gids = collections.defaultdict(set)
+    pid_gids = collections.defaultdict(list)
 
     for gid in gid_pids:
         for pid in gid_pids[gid]:
-            if pid_osguser[pid] is not None:
-                pid_gids[pid].add(gid)
+            if pid_osguser[pid] is not None and gid not in pid_gids[pid]:
+                pid_gids[pid].append(gid)
 
     return pid_gids
 
@@ -146,7 +151,7 @@ def get_osguser_groups(filter_group_name=None):
     if filter_group_name is not None:
         pid_gids = filter_by_group(pid_gids, groups, filter_group_name)
 
-    return { pid_osguser[pid]: set(map(groups.get, gids))
+    return { pid_osguser[pid]: map(groups.get, gids)
              for pid, gids in pid_gids.items() }
 
 
@@ -157,9 +162,9 @@ def parse_localmap(inputfile):
             # Split up 3 semantic columns
             split_line = line.strip().split(maxsplit=2)
             if split_line[0] == "*" and len(split_line) == 3:
-                line_groups = set(re.split(r'[ ,]+', split_line[2]))
+                line_groups = re.split(r'[ ,]+', split_line[2])
                 if split_line[1] in user_groupmap:
-                    user_groupmap[split_line[1]] |= line_groups
+                    user_groupmap[split_line[1]] = _deduplicate_list(user_groupmap[split_line[1]] + line_groups)
                 else:
                     user_groupmap[split_line[1]] = line_groups
     return user_groupmap
@@ -170,9 +175,9 @@ def merge_maps(maps):
     for projectmap in maps:
         for key in projectmap.keys():
             if key in merged_map:
-                merged_map[key] |= set(projectmap[key])
+                merged_map[key] = _deduplicate_list(merged_map[key] + projectmap[key])
             else:
-                merged_map[key] = set(projectmap[key])
+                merged_map[key] = projectmap[key]
     return merged_map
 
 
