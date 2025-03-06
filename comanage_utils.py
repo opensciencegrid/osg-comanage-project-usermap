@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import json
+import time
 import urllib.error
 import urllib.request
 from ldap3 import Server, Connection, ALL, ALL_ATTRIBUTES, SAFE_SYNC
@@ -27,9 +28,9 @@ TEST_UNIX_CLUSTER_ID = 10
 TEST_LDAP_TARGET_ID = 9
 
 
-MIN_TIMEOUT = 5
-MAX_TIMEOUT = 625
-TIMEOUTMULTIPLE = 5
+TIMEOUT_MIN = 5
+TIMEOUT_MULTIPLE = 5
+MAX_RETRIES = 5
 
 
 GET    = "GET"
@@ -81,20 +82,27 @@ def call_api2(method, target, endpoint, authstr, **kw):
 
 def call_api3(method, target, data, endpoint, authstr, **kw):
     req = mkrequest(method, target, data, endpoint, authstr, **kw)
-    trying = True
-    currentTimeout = MIN_TIMEOUT
-    while trying:
+    retries = 0
+    currentTimeout = TIMEOUT_MIN
+    requestingStart = time.time()
+    payload = None
+    while payload == None:
         try:
             resp = urllib.request.urlopen(req, timeout=currentTimeout)
+            if retries > 0:
+                print(f"Succeeded for request {req.full_url} after {retries} retries.")
             payload = resp.read()
-            trying = False
         except urllib.error.URLError as exception:
-            if currentTimeout < MAX_TIMEOUT:
-                currentTimeout *= TIMEOUTMULTIPLE
+            if retries < MAX_RETRIES:
+                print(f"Error: {exception} for request {req.full_url}, sleeping for {currentTimeout} seconds and retrying.")
+                time.sleep(currentTimeout)
+                currentTimeout *= TIMEOUT_MULTIPLE
+                retries += 1
             else:
+                requestingStop = time.time()
                 sys.exit(
-                    f"Exception raised after maximum number of retries and/or timeout {MAX_TIMEOUT} seconds reached. "
-                    + f"Exception reason: {exception.reason}.\n Request: {req.full_url}"
+                    f"Exception raised after maximum number of retries reached after {requestingStop - requestingStart} seconds. Retries: {retries}. "
+                + f"Exception reason: {exception}.\n Request: {req.full_url}"
                 )
 
     return json.loads(payload) if payload else None
