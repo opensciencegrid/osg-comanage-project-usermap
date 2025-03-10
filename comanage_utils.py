@@ -2,9 +2,9 @@
 
 import os
 import re
-import sys
 import json
 import time
+import exceptions
 import urllib.error
 import urllib.request
 from ldap3 import Server, Connection, ALL, ALL_ATTRIBUTES, SAFE_SYNC
@@ -27,9 +27,8 @@ TEST_OSG_CO_ID = 8
 TEST_UNIX_CLUSTER_ID = 10
 TEST_LDAP_TARGET_ID = 9
 
-
-TIMEOUT_MIN = 5
-TIMEOUT_MULTIPLE = 5
+# Value for the base of the exponential backoff
+TIMEOUT_BASE = 5
 MAX_RETRIES = 5
 
 
@@ -83,27 +82,28 @@ def call_api2(method, target, endpoint, authstr, **kw):
 def call_api3(method, target, data, endpoint, authstr, **kw):
     req = mkrequest(method, target, data, endpoint, authstr, **kw)
     retries = 0
-    currentTimeout = TIMEOUT_MIN
-    requestingStart = time.time()
+    current_timeout = TIMEOUT_BASE
+    total_timeout = 0
     payload = None
-    while payload == None:
+    while retries <= MAX_RETRIES:
         try:
-            resp = urllib.request.urlopen(req, timeout=currentTimeout)
-            if retries > 0:
-                print(f"Succeeded for request {req.full_url} after {retries} retries.")
+            resp = urllib.request.urlopen(req, timeout=current_timeout)
             payload = resp.read()
-        except urllib.error.URLError as exception:
-            if retries < MAX_RETRIES:
-                print(f"Error: {exception} for request {req.full_url}, sleeping for {currentTimeout} seconds and retrying.")
-                time.sleep(currentTimeout)
-                currentTimeout *= TIMEOUT_MULTIPLE
-                retries += 1
-            else:
-                requestingStop = time.time()
-                sys.exit(
-                    f"Exception raised after maximum number of retries reached after {requestingStop - requestingStart} seconds. Retries: {retries}. "
+            break
+        # exception catching, mainly for request timeouts and "Service Temporarily Unavailable" (Rate limiting).
+        except urllib.error.HTTPError as exception:
+            if retries >= MAX_RETRIES:
+                raise exceptions.URLRequestError(
+                    "Exception raised after maximum number of retries reached after total backoff of " + 
+                    f"{total_timeout} seconds. Retries: {retries}. "
                 + f"Exception reason: {exception}.\n Request: {req.full_url}"
                 )
+
+            print("waiting for seconds: " + str(current_timeout))
+            time.sleep(current_timeout)
+            total_timeout += current_timeout
+            current_timeout *= TIMEOUT_BASE
+            retries += 1
 
     return json.loads(payload) if payload else None
 
