@@ -4,7 +4,6 @@ import os
 import re
 import json
 import time
-import exceptions
 import urllib.error
 import urllib.request
 from ldap3 import Server, Connection, ALL, ALL_ATTRIBUTES, SAFE_SYNC
@@ -29,13 +28,23 @@ TEST_LDAP_TARGET_ID = 9
 
 # Value for the base of the exponential backoff
 TIMEOUT_BASE = 5
-MAX_RETRIES = 5
+MAX_ATTEMPTS = 5
 
 
 GET    = "GET"
 PUT    = "PUT"
 POST   = "POST"
 DELETE = "DELETE"
+
+#Exceptions
+class Error(Exception):
+    """Base exception class for all exceptions defined"""
+    pass
+
+
+class URLRequestError(Error):
+    """Class for exceptions due to not being able to fulfill a URLRequest"""
+    pass
 
 
 def getpw(user, passfd, passfile):
@@ -81,29 +90,28 @@ def call_api2(method, target, endpoint, authstr, **kw):
 
 def call_api3(method, target, data, endpoint, authstr, **kw):
     req = mkrequest(method, target, data, endpoint, authstr, **kw)
-    retries = 0
+    req_attempts = 0
     current_timeout = TIMEOUT_BASE
     total_timeout = 0
     payload = None
-    while retries <= MAX_RETRIES:
+    while req_attempts < MAX_ATTEMPTS:
         try:
             resp = urllib.request.urlopen(req, timeout=current_timeout)
-            payload = resp.read()
-            break
-        # exception catching, mainly for request timeouts and "Service Temporarily Unavailable" (Rate limiting).
-        except urllib.error.HTTPError as exception:
-            if retries >= MAX_RETRIES:
-                raise exceptions.URLRequestError(
+        # exception catching, mainly for request timeouts, "Service Temporarily Unavailable" (Rate limiting), and DNS failures.
+        except urllib.error.URLError as exception:
+            req_attempts += 1
+            if req_attempts >= MAX_ATTEMPTS:
+                raise URLRequestError(
                     "Exception raised after maximum number of retries reached after total backoff of " + 
-                    f"{total_timeout} seconds. Retries: {retries}. "
+                    f"{total_timeout} seconds. Retries: {req_attempts}. "
                 + f"Exception reason: {exception}.\n Request: {req.full_url}"
                 )
-
-            print("waiting for seconds: " + str(current_timeout))
             time.sleep(current_timeout)
             total_timeout += current_timeout
             current_timeout *= TIMEOUT_BASE
-            retries += 1
+        else:
+            payload = resp.read()
+            break
 
     return json.loads(payload) if payload else None
 
